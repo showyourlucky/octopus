@@ -13,7 +13,16 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/common/Toast';
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
-import { RefreshCw, X, Plus } from 'lucide-react';
+import { RefreshCw, X, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+
+export const DEFAULT_BASE_URLS: Partial<Record<ChannelType, string>> = {
+    [ChannelType.OpenAIChat]: 'https://api.openai.com/v1',
+    [ChannelType.OpenAIResponse]: 'https://api.openai.com/v1',
+    [ChannelType.Anthropic]: 'https://api.anthropic.com/v1',
+    [ChannelType.Gemini]: 'https://generativelanguage.googleapis.com/v1beta',
+    [ChannelType.Volcengine]: 'https://ark.cn-beijing.volces.com/api/v3',
+    [ChannelType.OpenAIEmbedding]: 'https://api.openai.com/v1',
+};
 
 export interface ChannelKeyFormItem {
     id?: number;
@@ -52,6 +61,7 @@ export interface ChannelFormProps {
     onCancel?: () => void;
     cancelText?: string;
     idPrefix?: string;
+    channelId?: number;
 }
 
 import {
@@ -60,6 +70,9 @@ import {
     AccordionItem,
     AccordionTrigger,
 } from "@/components/ui/accordion";
+import { BatchImportModal } from './BatchImportModal';
+import { Upload } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 
 export function ChannelForm({
     formData,
@@ -71,9 +84,11 @@ export function ChannelForm({
     onCancel,
     cancelText,
     idPrefix = 'channel',
+    channelId,
 }: ChannelFormProps) {
     const t = useTranslations('channel.form');
-
+    const queryClient = useQueryClient();
+    
     // Ensure the form always shows at least 1 row for base_urls / keys / custom_header.
     // This avoids "empty list" UI and also keeps URL + APIKEY layout consistent.
     useEffect(() => {
@@ -98,6 +113,14 @@ export function ChannelForm({
         : [];
     const [inputValue, setInputValue] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
+    const [batchImportOpen, setBatchImportOpen] = useState(false);
+    
+    // keys分页
+    const [keyPage, setKeyPage] = useState(1);
+    const keyPageSize = 10;
+    const totalKeyPages = Math.ceil((formData.keys?.length || 0) / keyPageSize);
+    const currentKeyPage = Math.min(Math.max(1, keyPage), Math.max(1, totalKeyPages));
+    const paginatedKeys = (formData.keys ?? []).slice((currentKeyPage - 1) * keyPageSize, currentKeyPage * keyPageSize);
 
     const fetchModel = useFetchModel();
 
@@ -166,10 +189,12 @@ export function ChannelForm({
     };
 
     const handleAddKey = () => {
+        const nextKeys = [...formData.keys, { enabled: true, channel_key: '' }];
         onFormDataChange({
             ...formData,
-            keys: [...formData.keys, { enabled: true, channel_key: '' }],
+            keys: nextKeys,
         });
+        setKeyPage(Math.ceil(nextKeys.length / keyPageSize));
     };
 
     const handleUpdateKey = (idx: number, patch: Partial<ChannelKeyFormItem>) => {
@@ -220,6 +245,31 @@ export function ChannelForm({
         onFormDataChange({ ...formData, custom_header: curr.filter((_, i) => i !== idx) });
     };
 
+    const handleBatchImportSuccess = () => {
+        queryClient.invalidateQueries({ queryKey: ['channel'] });
+        // Toast 可在modal 窗口中处理或无需单独设置，因为modal 窗口本身即能显示结果。
+    };
+
+    const handleKeysImported = (newKeys: string[]) => {
+        const keysToAdd = newKeys.map(k => ({
+            enabled: true,
+            channel_key: k,
+            remark: ''
+        }));
+        // 若列表中仅有一个空key，则将其过滤掉
+        let currentKeys = formData.keys;
+        if (currentKeys.length === 1 && !currentKeys[0].channel_key.trim()) {
+            currentKeys = [];
+        }
+        
+        const nextKeys = [...currentKeys, ...keysToAdd];
+        onFormDataChange({
+            ...formData,
+            keys: nextKeys,
+        });
+        setKeyPage(Math.ceil(nextKeys.length / keyPageSize));
+    };
+
     return (
         <form onSubmit={onSubmit} className="space-y-4 px-1">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -243,7 +293,24 @@ export function ChannelForm({
                     </label>
                     <Select
                         value={String(formData.type)}
-                        onValueChange={(value) => onFormDataChange({ ...formData, type: Number(value) as ChannelType })}
+                        onValueChange={(value) => {
+                            const newType = Number(value) as ChannelType;
+                            const currentBaseUrl = formData.base_urls?.[0]?.url;
+                            const oldDefault = DEFAULT_BASE_URLS[formData.type];
+
+                            // Only auto-fill if the user hasn't customized the URL (empty or matches previous default)
+                            let nextBaseUrls = formData.base_urls;
+                            if (!currentBaseUrl || currentBaseUrl === oldDefault) {
+                                const newDefault = DEFAULT_BASE_URLS[newType] || '';
+                                if (nextBaseUrls && nextBaseUrls.length > 0) {
+                                    nextBaseUrls = [{ ...nextBaseUrls[0], url: newDefault }, ...nextBaseUrls.slice(1)];
+                                } else {
+                                    nextBaseUrls = [{ url: newDefault, delay: 0 }];
+                                }
+                            }
+
+                            onFormDataChange({ ...formData, type: newType, base_urls: nextBaseUrls });
+                        }}
                     >
                         <SelectTrigger id={`${idPrefix}-type`} className="rounded-xl w-full border border-border px-4 py-2 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                             <SelectValue />
@@ -304,49 +371,98 @@ export function ChannelForm({
                 </div>
             </div>
 
+            <BatchImportModal 
+                open={batchImportOpen} 
+                onOpenChange={setBatchImportOpen}
+                channelId={channelId}
+                onSuccess={handleBatchImportSuccess}
+                onKeysImported={handleKeysImported}
+            />
+
             <div className="space-y-2">
                 <div className="flex items-center justify-between">
                     <label className="text-sm font-medium text-card-foreground">
                         {t('apiKey')} {formData.keys.length > 0 ? `(${formData.keys.length})` : ''}
                     </label>
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleAddKey}
-                        className="h-6 px-2 text-xs text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
-                    >
-                        <Plus className="h-3 w-3 mr-1" />
-                        {t('add')}
-                    </Button>
+                    <div className="flex gap-2">
+                        {totalKeyPages > 1 && (
+                            <div className="flex items-center gap-1 mr-2">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                    onClick={() => setKeyPage(p => Math.max(1, p - 1))}
+                                    disabled={currentKeyPage === 1}
+                                >
+                                    <ChevronLeft className="h-3 w-3" />
+                                </Button>
+                                <span className="text-xs text-muted-foreground min-w-[3rem] text-center select-none">
+                                    {currentKeyPage} / {totalKeyPages}
+                                </span>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                    onClick={() => setKeyPage(p => Math.min(totalKeyPages, p + 1))}
+                                    disabled={currentKeyPage === totalKeyPages}
+                                >
+                                    <ChevronRight className="h-3 w-3" />
+                                </Button>
+                            </div>
+                        )}
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setBatchImportOpen(true)}
+                            className="h-6 px-2 text-xs text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
+                        >
+                            <Upload className="h-3 w-3 mr-1" />
+                            {t('batchImport')}
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleAddKey}
+                            className="h-6 px-2 text-xs text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
+                        >
+                            <Plus className="h-3 w-3 mr-1" />
+                            {t('add')}
+                        </Button>
+                    </div>
                 </div>
                 <div className="space-y-2">
-                    {(formData.keys ?? []).map((k, idx) => (
-                        <div key={k.id ?? `new-${idx}`} className="flex items-center gap-2">
+                    {paginatedKeys.map((k, idx) => {
+                        const globalIdx = (currentKeyPage - 1) * keyPageSize + idx;
+                        return (
+                        <div key={k.id ?? `new-${globalIdx}`} className="flex items-center gap-2">
                             <Input
                                 type="text"
                                 value={k.channel_key}
-                                onChange={(e) => handleUpdateKey(idx, { channel_key: e.target.value })}
+                                onChange={(e) => handleUpdateKey(globalIdx, { channel_key: e.target.value })}
                                 placeholder={t('apiKey')}
-                                required={idx === 0}
+                                required={globalIdx === 0}
                                 className="rounded-xl flex-1"
                             />
                             <Input
                                 type="text"
                                 value={k.remark ?? ''}
-                                onChange={(e) => handleUpdateKey(idx, { remark: e.target.value })}
+                                onChange={(e) => handleUpdateKey(globalIdx, { remark: e.target.value })}
                                 placeholder={t('remark')}
                                 className="rounded-xl w-32"
                             />
                             <Switch
                                 checked={k.enabled}
-                                onCheckedChange={(checked) => handleUpdateKey(idx, { enabled: checked })}
+                                onCheckedChange={(checked) => handleUpdateKey(globalIdx, { enabled: checked })}
                             />
                             <Button
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleRemoveKey(idx)}
+                                onClick={() => handleRemoveKey(globalIdx)}
                                 disabled={(formData.keys ?? []).length <= 1}
                                 className="h-8 w-8 p-0 rounded-xl text-muted-foreground hover:text-destructive hover:bg-transparent disabled:opacity-40"
                                 title="Remove"
@@ -354,7 +470,7 @@ export function ChannelForm({
                                 <X className="h-4 w-4" />
                             </Button>
                         </div>
-                    ))}
+                    )})}
                 </div>
             </div>
 

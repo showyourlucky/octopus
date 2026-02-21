@@ -7,7 +7,7 @@ import {
 } from '@/components/ui/morphing-dialog';
 import { useCreateChannel, ChannelType, AutoGroupType } from '@/api/endpoints/channel';
 import { useTranslations } from 'next-intl';
-import { ChannelForm, type ChannelFormData } from './Form';
+import { ChannelForm, type ChannelFormData, DEFAULT_BASE_URLS } from './Form';
 
 export function CreateDialogContent() {
     const { setIsOpen } = useMorphingDialog();
@@ -15,7 +15,7 @@ export function CreateDialogContent() {
     const [formData, setFormData] = useState<ChannelFormData>({
         name: '',
         type: ChannelType.OpenAIChat,
-        base_urls: [{ url: '', delay: 0 }],
+        base_urls: [{ url: DEFAULT_BASE_URLS[ChannelType.OpenAIChat] || '', delay: 0 }],
         custom_header: [],
         channel_proxy: '',
         param_override: '',
@@ -67,7 +67,7 @@ export function CreateDialogContent() {
                     setFormData({
                         name: '',
                         type: ChannelType.OpenAIChat,
-                        base_urls: [{ url: '', delay: 0 }],
+                        base_urls: [{ url: DEFAULT_BASE_URLS[ChannelType.OpenAIChat] || '', delay: 0 }],
                         custom_header: [],
                         channel_proxy: '',
                         param_override: '',

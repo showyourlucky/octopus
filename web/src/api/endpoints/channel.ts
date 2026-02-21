@@ -3,6 +3,7 @@ import { apiClient } from '../client';
 import { logger } from '@/lib/logger';
 import { formatCount, formatMoney, formatTime } from '@/lib/utils';
 import { StatsChannel, type StatsMetricsFormatted } from './stats';
+
 /**
  * 渠道类型枚举
  */
@@ -359,6 +360,46 @@ export function useSyncChannel() {
         },
         onError: (error) => {
             logger.error('渠道同步失败:', error);
+        },
+    });
+}
+
+export type BatchImportStatusResponse = {
+    id: string;
+    status: 'pending' | 'running' | 'completed' | 'failed';
+    total: number;
+    processed: number;
+    success_count: number;
+    fail_count: number;
+    errors: string[];
+    duplicates: string[];
+};
+
+export type BatchImportRequest = {
+    channel_id: number;
+    keys: string[];
+};
+
+export function useBatchImportKeys() {
+    return useMutation({
+        mutationFn: async (data: BatchImportRequest) => {
+            return apiClient.post<{ job_id: string }>('/api/v1/channel/batch_import', data);
+        },
+    });
+}
+
+export function useGetBatchImportStatus() {
+    return useMutation({
+        mutationFn: async (jobId: string) => {
+            return apiClient.get<BatchImportStatusResponse>(`/api/v1/channel/batch_import/${jobId}`);
+        },
+    });
+}
+
+export function useCancelBatchImport() {
+    return useMutation({
+        mutationFn: async (jobId: string) => {
+            return apiClient.post('/api/v1/channel/batch_import/cancel', { job_id: jobId });
         },
     });
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
     Trash2,
     CheckCircle2,
@@ -9,7 +9,9 @@ import {
     Activity,
     TrendingUp,
     Globe,
-    Key
+    Key,
+    ChevronLeft,
+    ChevronRight
 } from 'lucide-react';
 import { useUpdateChannel, useDeleteChannel, type Channel, type UpdateChannelRequest } from '@/api/endpoints/channel';
 import {
@@ -60,6 +62,16 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
         match_regex: channel.match_regex ?? '',
     });
     const t = useTranslations('channel.detail');
+    const [page, setPage] = useState(1);
+    const pageSize = 10;
+    
+    const paginatedKeys = useMemo(() => {
+        if (!channel.keys) return [];
+        const start = (page - 1) * pageSize;
+        return channel.keys.slice(start, start + pageSize);
+    }, [channel.keys, page]);
+    
+    const totalPages = Math.ceil((channel.keys?.length || 0) / pageSize);
 
     const currentView = isEditing ? 'editing' : 'viewing';
 
@@ -348,12 +360,39 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
 
                                 {/* Keys */}
                                 <section className="space-y-3">
-                                    <h4 className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                        <Key className="size-3.5" />
-                                        {t('sections.keys')}
-                                    </h4>
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                            <Key className="size-3.5" />
+                                            {t('sections.keys')}
+                                        </h4>
+                                        {totalPages > 1 && (
+                                            <div className="flex items-center gap-1">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-6 w-6"
+                                                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                                                    disabled={page === 1}
+                                                >
+                                                    <ChevronLeft className="h-3 w-3" />
+                                                </Button>
+                                                <span className="text-xs text-muted-foreground min-w-[3rem] text-center">
+                                                    {page} / {totalPages}
+                                                </span>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-6 w-6"
+                                                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                                                    disabled={page === totalPages}
+                                                >
+                                                    <ChevronRight className="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </div>
                                     <div className="rounded-2xl border bg-card overflow-hidden">
-                                        {channel.keys?.map((key) => (
+                                        {paginatedKeys.map((key) => (
                                             <div key={key.id} className="flex items-center gap-3 p-3 sm:p-4 border-b last:border-0 hover:bg-accent/5 transition-colors">
                                                 <div className={cn("size-2 shrink-0 rounded-full", key.enabled ? "bg-emerald-500" : "bg-destructive")} />
 
@@ -457,6 +496,7 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
                                 onCancel={() => setIsEditing(false)}
                                 cancelText={t('actions.cancel')}
                                 idPrefix="channel"
+                                channelId={channel.id}
                             />
                         </TabsContent>
                     </TabsContents>

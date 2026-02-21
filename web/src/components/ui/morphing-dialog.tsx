@@ -169,6 +169,9 @@ function MorphingDialogContent({
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        if (document.querySelector('[data-slot="dialog-content"]')) {
+          return;
+        }
         setIsOpen(false);
       }
       if (event.key === 'Tab') {
@@ -233,6 +236,13 @@ function MorphingDialogContent({
       }
       const openPopoverContent = document.querySelector('[data-slot="popover-content"]');
       if (openPopoverContent) {
+        return true;
+      }
+      if (target?.closest('[data-slot="dialog-content"]')) {
+        return true;
+      }
+      const openDialogContent = document.querySelector('[data-slot="dialog-content"]');
+      if (openDialogContent) {
         return true;
       }
       return false;
