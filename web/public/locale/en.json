@@ -500,6 +500,16 @@
             "autoGroupRegex": "Regex",
             "matchRegex": "Match Regex",
             "matchRegexPlaceholder": "Optional: regex pattern to match request model names",
+            "enableMultiKeyRetry": "Multi-Key Retry",
+            "enableMultiKeyRetryDesc": "Automatically retry with other keys when request fails",
+            "retryCount": "Retry Count",
+            "retryCountDesc": "Max retry attempts",
+            "keyLoadBalanceMode": "Key Load Balance",
+            "keyLoadBalanceModeDesc": "Strategy for selecting keys",
+            "loadBalanceRoundRobin": "Round Robin",
+            "loadBalanceRandom": "Random",
+            "autoBanKeyFailures": "Auto Ban Threshold",
+            "autoBanKeyFailuresDesc": "Auto disable key after consecutive failures (0 to disable)",
             "remark": "Remark"
         }
     }

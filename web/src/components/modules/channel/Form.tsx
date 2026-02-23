@@ -49,6 +49,10 @@ export interface ChannelFormData {
     auto_sync: boolean;
     auto_group: AutoGroupType;
     match_regex: string;
+    enable_multi_key_retry: boolean;
+    retry_count: number;
+    key_load_balance_mode: string;
+    auto_ban_key_failures: number;
 }
 
 export interface ChannelFormProps {
@@ -597,6 +601,82 @@ export function ChannelForm({
                                         <SelectItem className='rounded-xl' value={String(AutoGroupType.Regex)}>{t('autoGroupRegex')}</SelectItem>
                                     </SelectContent>
                                 </Select>
+                            </div>
+
+                            <div className="space-y-2 col-span-1 md:col-span-2 border rounded-xl p-4 bg-muted/20">
+                                <div className="flex items-center justify-between">
+                                    <div className="space-y-0.5">
+                                        <label className="text-sm font-medium text-card-foreground">
+                                            {t('enableMultiKeyRetry')}
+                                        </label>
+                                        <p className="text-xs text-muted-foreground">
+                                            {t('enableMultiKeyRetryDesc')}
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        checked={formData.enable_multi_key_retry}
+                                        onCheckedChange={(checked) => onFormDataChange({ ...formData, enable_multi_key_retry: checked })}
+                                    />
+                                </div>
+
+                                {formData.enable_multi_key_retry && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-card-foreground">
+                                                {t('retryCount')}
+                                            </label>
+                                            <Input
+                                                type="number"
+                                                min={1}
+                                                value={formData.retry_count}
+                                                onChange={(e) => {
+                                                    const val = parseInt(e.target.value);
+                                                    if (!isNaN(val)) {
+                                                        onFormDataChange({ ...formData, retry_count: val });
+                                                    }
+                                                }}
+                                                className="rounded-xl"
+                                            />
+                                            <p className="text-xs text-muted-foreground">{t('retryCountDesc')}</p>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-card-foreground">
+                                                {t('keyLoadBalanceMode')}
+                                            </label>
+                                            <Select
+                                                value={formData.key_load_balance_mode}
+                                                onValueChange={(value) => onFormDataChange({ ...formData, key_load_balance_mode: value })}
+                                            >
+                                                <SelectTrigger className="rounded-xl w-full border border-border px-4 py-2 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent className="rounded-xl">
+                                                    <SelectItem className='rounded-xl' value="round_robin">{t('loadBalanceRoundRobin')}</SelectItem>
+                                                    <SelectItem className='rounded-xl' value="random">{t('loadBalanceRandom')}</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            <p className="text-xs text-muted-foreground">{t('keyLoadBalanceModeDesc')}</p>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-card-foreground">
+                                                {t('autoBanKeyFailures')}
+                                            </label>
+                                            <Input
+                                                type="number"
+                                                min={0}
+                                                value={formData.auto_ban_key_failures}
+                                                onChange={(e) => {
+                                                    const val = parseInt(e.target.value);
+                                                    if (!isNaN(val)) {
+                                                        onFormDataChange({ ...formData, auto_ban_key_failures: val });
+                                                    }
+                                                }}
+                                                className="rounded-xl"
+                                            />
+                                            <p className="text-xs text-muted-foreground">{t('autoBanKeyFailuresDesc')}</p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="space-y-2">

@@ -198,6 +198,22 @@ func ChannelUpdate(req *model.ChannelUpdateRequest, ctx context.Context) (*model
 		selectFields = append(selectFields, "match_regex")
 		updates.MatchRegex = req.MatchRegex
 	}
+	if req.EnableMultiKeyRetry != nil {
+		selectFields = append(selectFields, "enable_multi_key_retry")
+		updates.EnableMultiKeyRetry = *req.EnableMultiKeyRetry
+	}
+	if req.RetryCount != nil {
+		selectFields = append(selectFields, "retry_count")
+		updates.RetryCount = *req.RetryCount
+	}
+	if req.KeyLoadBalanceMode != nil {
+		selectFields = append(selectFields, "key_load_balance_mode")
+		updates.KeyLoadBalanceMode = *req.KeyLoadBalanceMode
+	}
+	if req.AutoBanKeyFailures != nil {
+		selectFields = append(selectFields, "auto_ban_key_failures")
+		updates.AutoBanKeyFailures = *req.AutoBanKeyFailures
+	}
 
 	// 只有当有字段需要更新时才执行 UPDATE
 	if len(selectFields) > 0 {

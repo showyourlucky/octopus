@@ -60,6 +60,10 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
         auto_sync: channel.auto_sync,
         auto_group: channel.auto_group,
         match_regex: channel.match_regex ?? '',
+        enable_multi_key_retry: channel.enable_multi_key_retry,
+        retry_count: channel.retry_count,
+        key_load_balance_mode: channel.key_load_balance_mode,
+        auto_ban_key_failures: channel.auto_ban_key_failures,
     });
     const t = useTranslations('channel.detail');
     const [page, setPage] = useState(1);
@@ -99,6 +103,10 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
         if (formData.proxy !== channel.proxy) req.proxy = formData.proxy;
         if (formData.auto_sync !== channel.auto_sync) req.auto_sync = formData.auto_sync;
         if (formData.auto_group !== channel.auto_group) req.auto_group = formData.auto_group;
+        if (formData.enable_multi_key_retry !== channel.enable_multi_key_retry) req.enable_multi_key_retry = formData.enable_multi_key_retry;
+        if (formData.retry_count !== channel.retry_count) req.retry_count = formData.retry_count;
+        if (formData.key_load_balance_mode !== channel.key_load_balance_mode) req.key_load_balance_mode = formData.key_load_balance_mode;
+        if (formData.auto_ban_key_failures !== channel.auto_ban_key_failures) req.auto_ban_key_failures = formData.auto_ban_key_failures;
 
         if (!headersEqual(formData.custom_header, channel.custom_header)) {
             req.custom_header = (formData.custom_header ?? [])

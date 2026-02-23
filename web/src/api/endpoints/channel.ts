@@ -66,6 +66,10 @@ export type Channel = {
     param_override?: string | null;
     channel_proxy?: string | null;
     match_regex?: string | null;
+    enable_multi_key_retry: boolean;
+    retry_count: number;
+    key_load_balance_mode: string;
+    auto_ban_key_failures: number; // 0 means disabled
     stats: StatsChannel;
 };
 
@@ -94,6 +98,10 @@ export type CreateChannelRequest = {
     channel_proxy?: string | null;
     param_override?: string | null;
     match_regex?: string | null;
+    enable_multi_key_retry?: boolean;
+    retry_count?: number;
+    key_load_balance_mode?: string;
+    auto_ban_key_failures?: number;
 };
 
 /**
@@ -114,6 +122,10 @@ export type UpdateChannelRequest = {
     channel_proxy?: string | null;
     param_override?: string | null;
     match_regex?: string | null;
+    enable_multi_key_retry?: boolean;
+    retry_count?: number;
+    key_load_balance_mode?: string;
+    auto_ban_key_failures?: number;
     // keys diff
     keys_to_add?: Array<Pick<ChannelKey, 'enabled' | 'channel_key' | 'remark'>>;
     keys_to_update?: Array<{ id: number; enabled?: boolean; channel_key?: string; remark?: string }>;
