@@ -52,6 +52,39 @@
         "log": "Log",
         "setting": "Setting"
     },
+    "toolbar": {
+        "popover": {
+            "ariaLabel": "View options",
+            "layout": "Layout",
+            "sort": "Sort",
+            "grid": "Grid",
+            "list": "List",
+            "nameAsc": "Name Asc",
+            "nameDesc": "Name Desc",
+            "createdAsc": "Time Asc",
+            "createdDesc": "Time Desc",
+            "asc": "Asc",
+            "desc": "Desc",
+            "filter": {
+                "title": "Filter",
+                "channel": {
+                    "all": "All channels",
+                    "enabled": "Enabled only",
+                    "disabled": "Disabled only"
+                },
+                "group": {
+                    "all": "All groups",
+                    "withMembers": "With members",
+                    "empty": "Empty groups"
+                },
+                "model": {
+                    "all": "All models",
+                    "priced": "Priced only",
+                    "free": "Free only"
+                }
+            }
+        }
+    },
     "common": {
         "copy": {
             "success": "Copied",
@@ -82,9 +115,16 @@
             "outputCost": "Output Cost"
         },
         "chart": {
+            "title": "Trend",
             "totalRequests": "Total Requests",
             "totalCost": "Total Cost",
+            "totalTokens": "Total Tokens",
             "timePeriod": "Time Period",
+            "metricType": {
+                "cost": "Cost",
+                "count": "Count",
+                "tokens": "Tokens"
+            },
             "period": {
                 "today": "Today",
                 "last7Days": "7 Days",
@@ -95,6 +135,7 @@
             "title": "Ranking",
             "sortByCost": "Cost",
             "sortByCount": "Count",
+            "sortByTokens": "Tokens",
             "noData": "No ranking data",
             "successRate": "Success Rate"
         }

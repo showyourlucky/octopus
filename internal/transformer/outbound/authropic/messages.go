@@ -312,9 +312,18 @@ func convertToAnthropicRequest(req *model.InternalLLMRequest) *anthropicModel.Me
 
 	// Convert thinking/reasoning
 	if req.ReasoningEffort != "" {
-		result.Thinking = &anthropicModel.Thinking{
-			Type:         "enabled",
-			BudgetTokens: getThinkingBudget(req.ReasoningEffort, req.ReasoningBudget),
+		if req.AdaptiveThinking {
+			result.Thinking = &anthropicModel.Thinking{
+				Type: anthropicModel.ThinkingTypeAdaptive,
+			}
+			result.OutputConfig = &anthropicModel.OutputConfig{
+				Effort: req.ReasoningEffort,
+			}
+		} else {
+			result.Thinking = &anthropicModel.Thinking{
+				Type:         anthropicModel.ThinkingTypeEnabled,
+				BudgetTokens: getThinkingBudget(req.ReasoningEffort, req.ReasoningBudget),
+			}
 		}
 	}
 
@@ -382,10 +391,34 @@ func convertMessages(req *model.InternalLLMRequest) []anthropicModel.MessagePara
 		}
 
 		converted := convertSingleMessage(msg, req.Messages, processedIndexes)
-		messages = append(messages, converted...)
+		for _, convertedMsg := range converted {
+			// Anthropic API 要求消息角色必须交替出现（user/assistant/user/assistant）。
+			// 当 OpenAI 格式的多个连续 tool 消息被各自转换为独立的 user 消息时，
+			// 会产生连续的同角色消息，需要合并以避免 "Improperly formed request" 错误。
+			if n := len(messages); n > 0 && messages[n-1].Role == convertedMsg.Role {
+				last := &messages[n-1]
+				last.Content = anthropicModel.MessageContent{
+					MultipleContent: append(contentToBlocks(last.Content), contentToBlocks(convertedMsg.Content)...),
+				}
+			} else {
+				messages = append(messages, convertedMsg)
+			}
+		}
 	}
 
 	return messages
+}
+
+// contentToBlocks 将 MessageContent 统一展开为 MessageContentBlock 切片。
+func contentToBlocks(c anthropicModel.MessageContent) []anthropicModel.MessageContentBlock {
+	if len(c.MultipleContent) > 0 {
+		// 返回副本，避免后续 append 污染原 slice
+		return append([]anthropicModel.MessageContentBlock(nil), c.MultipleContent...)
+	}
+	if c.Content != nil && *c.Content != "" {
+		return []anthropicModel.MessageContentBlock{{Type: "text", Text: c.Content}}
+	}
+	return nil
 }
 
 func convertSingleMessage(msg model.Message, allMessages []model.Message, processedIndexes map[int]bool) []anthropicModel.MessageParam {
@@ -440,14 +473,7 @@ func convertToolMessage(msg model.Message, allMessages []model.Message, processe
 	// original Anthropic request may also include additional user content alongside tool_result.
 	if userMsg := findUserMessageByIndex(allMessages, *msg.MessageIndex); userMsg != nil {
 		userContent := buildMessageContent(*userMsg)
-		if len(userContent.MultipleContent) > 0 {
-			contentBlocks = append(contentBlocks, userContent.MultipleContent...)
-		} else if userContent.Content != nil && *userContent.Content != "" {
-			contentBlocks = append(contentBlocks, anthropicModel.MessageContentBlock{
-				Type: "text",
-				Text: userContent.Content,
-			})
-		}
+		contentBlocks = append(contentBlocks, contentToBlocks(userContent)...)
 	}
 
 	processedIndexes[*msg.MessageIndex] = true
@@ -725,21 +751,23 @@ func convertCacheControl(cc *model.CacheControl) *anthropicModel.CacheControl {
 	}
 }
 
-func getThinkingBudget(effort string, budget *int64) int64 {
+func getThinkingBudget(effort string, budget *int64) *int64 {
 	if budget != nil {
-		return *budget
+		return budget
 	}
 
+	var result int64
 	switch effort {
-	case "low":
-		return 1024
-	case "medium":
-		return 8192
-	case "high":
-		return 32768
+	case anthropicModel.EffortLow:
+		result = 1024
+	case anthropicModel.EffortMedium:
+		result = 8192
+	case anthropicModel.EffortHigh:
+		result = 32768
 	default:
-		return 8192
+		result = 8192
 	}
+	return &result
 }
 
 // Response conversion functions
