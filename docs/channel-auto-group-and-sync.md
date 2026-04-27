@@ -37,7 +37,8 @@
 3. **自动更新**：
    - 新增的模型会自动添加到渠道的模型列表中
    - 已消失的模型会从渠道配置中移除
-   - 同时会删除与消失模型相关的分组关联
+   - **保护自定义模型**：`custom_model` 字段中的模型会被保留，不会因为 API 未返回而被删除
+   - 同时会删除与消失模型相关的分组关联（但不会删除 `custom_model` 中模型的分组关联）
 4. **触发自动分组**：如果渠道启用了自动分组，会自动执行分组匹配
 
 ### 使用场景
@@ -56,6 +57,7 @@
 - 只有启用了"自动同步"开关的渠道才会被同步
 - 同步过程中会自动触发自动分组功能（如果启用）
 - 消失的模型会被自动从所有分组中移除
+- **`custom_model` 中的模型会被保留**：即使 API 未返回这些模型，它们也不会被删除，分组关联也会保留
 - 系统启动时会立即执行一次同步，之后按设定间隔执行
 
 ### 如何查看同步状态
@@ -73,6 +75,62 @@
    - 如果发现渠道配置了自动同步但没有同步，可以手动触发一次
    - 在设置页面点击"同步渠道"按钮
    - 检查日志查看是否有错误信息
+
+### 模型过滤（match_regex）
+
+#### 功能说明
+
+`match_regex` 是渠道层级的"模型名称白名单"过滤器。当系统从渠道 API 拉取模型列表后，仅保留正则匹配命中的模型，过滤掉不需要的模型。该字段位于渠道编辑页面的 **"高级设置"** 中，对应 UI 标签为 **"匹配正则"**。
+
+> 注意：UI 占位符提示为"可选：用于匹配请求模型名称的正则表达式"，但实际作用是**过滤渠道 `/v1/models` 接口返回的模型列表**，并不参与运行时请求路由。
+
+#### 生效场景
+
+| 场景 | 调用入口 |
+|------|----------|
+| 编辑渠道时点击"获取模型列表" | `internal/server/handlers/channel.go` 的 `FetchModels` 处理 |
+| 自动同步任务（`auto_sync` 启用） | `internal/task/sync.go` 调用 `helper.FetchModels` |
+
+- 留空 → 不过滤，渠道返回的模型全部保留
+- 非空 → 仅保留正则命中的模型
+- 编译失败 → 整个同步动作返回错误，渠道模型列表不更新
+
+核心实现位于 `internal/helper/fetch.go:31-47`。
+
+#### 正则引擎
+
+- 使用 `github.com/dlclark/regexp2`，**ECMAScript 模式**（与 JavaScript 正则语法一致）
+- 调用 `re.MatchString(model)` 进行**部分匹配**判定，命中即保留
+- 支持 Go 原生 `regexp` 包不支持的特性：前向断言 `(?=)` / `(?!)`、后向断言 `(?<=)` / `(?<!)`
+
+#### 填写示例
+
+| 目的 | 正则 |
+|------|------|
+| 不过滤（默认） | 留空 |
+| 只保留 GPT 系列 | `^gpt-` |
+| 只保留 GPT-4 系列 | `^gpt-4` |
+| 同时保留 gpt 和 claude 系列 | `gpt\|claude` |
+| 排除嵌入模型 | `^(?!.*embedding).*$` |
+| 排除带 `-realtime` 后缀 | `^(?!.*-realtime).*$` |
+| 仅保留指定几个模型 | `^(gpt-4o\|claude-3-5-sonnet\|gemini-2\.0-flash)$` |
+| 排除 dall-e、whisper、tts 等非对话模型 | `^(?!(dall-e\|whisper\|tts)).*$` |
+
+#### 使用建议
+
+- **部分匹配特性**：写 `gpt-4` 时所有名字含 `gpt-4` 的模型都会命中。如需严格全串匹配，请用 `^...$` 包裹
+- **特殊字符要转义**：版本号中的 `.` 应写为 `\.`，例如 `gemini-2\.0-flash`
+- **过严风险**：正则过于严格可能导致同步后模型列表为空，建议先在浏览器控制台用相同正则验证（语法兼容 JS）
+- **失败处理**：正则编译失败或匹配异常会导致同步任务返回错误并跳过该渠道，错误信息可在日志中查看
+
+#### 与"分组匹配正则"的区别
+
+| 字段位置 | 作用阶段 | 作用对象 |
+|---------|---------|---------|
+| **渠道**编辑页 → 高级设置 → 匹配正则（`channel.match_regex`） | 拉取/同步模型列表时 | 过滤渠道返回的模型，决定哪些模型存入渠道配置 |
+| **分组**编辑页 → 匹配正则（`group.match_regex`） | 自动分组时（`auto_group=regex`） | 决定渠道中的哪些模型会被加入到该分组 |
+
+二者独立配置，作用阶段不同，请勿混淆。
 
 ---
 
@@ -204,8 +262,9 @@
 
 ```go
 type Channel struct {
-    AutoSync  bool          `json:"auto_sync" gorm:"default:false"`
-    AutoGroup AutoGroupType `json:"auto_group" gorm:"default:0"`
+    AutoSync   bool          `json:"auto_sync" gorm:"default:false"`
+    AutoGroup  AutoGroupType `json:"auto_group" gorm:"default:0"`
+    MatchRegex *string       `json:"match_regex"` // 模型过滤正则（ECMAScript），仅在拉取/同步模型列表时生效
     // ...
 }
 
@@ -266,33 +325,45 @@ func SyncModelsTask() {
         // 3. 调用 API 获取模型列表
         fetchModels, _ := helper.FetchModels(ctx, channel)
         
-        // 4. 对比新旧模型列表
-        oldModels := strings.Split(channel.Model, ",")
-        deletedModels, addedModels := diff.Diff(oldModels, fetchModels)
+        // 4. 排除已在 custom_model 中的模型
+        customModels := xstrings.SplitTrimCompact(",", channel.CustomModel)
+        for _, m := range fetchModels {
+            if m != "" && m != " " {
+               if _, isCustom := customModels[m]; !isCustom {
+                  mergedModels[m] = struct{}{}
+               }
+            }
+         }
         
-        // 5. 更新渠道模型配置
+        // 5. 对比新旧模型列表
+        oldModels := strings.Split(channel.Model, ",")
+        deletedModels, addedModels := diff.Diff(oldModels, mergedModels)
+        
+        // 6. 更新渠道模型配置
         if len(deletedModels) > 0 || len(addedModels) > 0 {
             op.ChannelUpdate(&model.ChannelUpdateRequest{
                 ID:    channel.ID,
-                Model: &fetchModelStr,
+                Model: &mergedModelStr,
             }, ctx)
         }
         
-        // 6. 删除消失模型的分组关联
+        // 7. 删除消失模型的分组关联（但保留 custom_model 中的模型）
         if len(deletedModels) > 0 {
+            // 过滤掉 custom_model 中的模型
+            actualDeletedModels := filterOutCustomModels(deletedModels, customModels)
             op.GroupItemBatchDelByChannelAndModels(keys, ctx)
         }
         
-        // 7. 执行自动分组
-        if len(newModels) > 0 {
+        // 8. 执行自动分组
+        if len(mergedModels) > 0 {
             helper.ChannelAutoGroup(&channel, ctx)
         }
     }
     
-    // 8. 更新全局模型价格表
+    // 9. 更新全局模型价格表
     // ...
     
-    // 9. 记录最后同步时间
+    // 10. 记录最后同步时间
     lastSyncModelsTime = time.Now()
 }
 ```
@@ -395,21 +466,24 @@ A：可能的原因：
 ### Q3：自动分组会覆盖手动添加的分组关联吗？
 A：不会。自动分组只会添加新的关联，不会删除已存在的关联。只有当模型从渠道中消失时，相关的分组关联才会被自动清理。
 
-### Q4：如果 API Key 失效，自动同步会怎样？
+### Q4：自动同步会删除我手动添加的自定义模型吗？
+A：不会。`custom_model` 字段中的模型会被保护，即使 API 未返回这些模型，它们也会被保留在渠道的模型列表中，相关的分组关联也不会被删除。
+
+### Q5：如果 API Key 失效，自动同步会怎样？
 A：同步任务会记录错误日志，但不会影响其他渠道的同步。建议定期检查日志，确保所有渠道的 API Key 有效。
 
-### Q5：正则匹配模式下，如何设置分组的正则表达式？
+### Q6：正则匹配模式下，如何设置分组的正则表达式？
 A：在分组编辑页面，有一个 "匹配正则" 字段，填入符合 ECMAScript 标准的正则表达式即可。
 
-### Q6：可以为不同渠道设置不同的自动分组模式吗？
+### Q7：可以为不同渠道设置不同的自动分组模式吗？
 A：可以。每个渠道的自动分组模式是独立配置的，互不影响。
 
-### Q7：如何手动触发一次同步？
+### Q8：如何手动触发一次同步？
 A：有两种方式：
 1. 在设置页面点击"同步渠道"按钮
 2. 调用 API：`POST /api/v1/channel/sync`
 
-### Q8：修改同步间隔后需要重启系统吗？
+### Q9：修改同步间隔后需要重启系统吗？
 A：不需要。修改"LLM 同步间隔"后，任务会立即使用新的间隔重新调度，无需重启。
 
 ---
