@@ -3,11 +3,11 @@ package handlers
 import (
 	"fmt"
 	"net/http"
-	"regexp"
 	"strings"
 
 	"github.com/bestruirui/octopus/internal/model"
 	"github.com/bestruirui/octopus/internal/op"
+	"github.com/dlclark/regexp2"
 	"github.com/bestruirui/octopus/internal/server/middleware"
 	"github.com/bestruirui/octopus/internal/server/resp"
 	"github.com/bestruirui/octopus/internal/server/router"
@@ -16,7 +16,8 @@ import (
 
 // QuickGroupItem 快速创建分组的单个模型配置
 type QuickGroupItem struct {
-	ModelName  string   `json:"model_name" binding:"required"` // 模型名，同时作为分组名
+	ModelName  string   `json:"model_name" binding:"required"` // 原始模型名（用于匹配渠道模型）
+	GroupName  string   `json:"group_name"`                    // 自定义分组名（为空时使用 model_name）
 	Mode       int      `json:"mode"`                          // 分组模式，默认1=轮询
 	Exclude    []string `json:"exclude"`                       // 排除字段列表
 	MatchRegex string   `json:"match_regex"`                   // 用户自定义正则（优先于自动生成）
@@ -147,8 +148,14 @@ func batchCreateGroups(c *gin.Context) {
 			continue
 		}
 
+		// 分组名：优先使用自定义 group_name，否则使用 model_name
+		groupName := strings.TrimSpace(item.GroupName)
+		if groupName == "" {
+			groupName = item.ModelName
+		}
+
 		group := model.Group{
-			Name:       item.ModelName,
+			Name:       groupName,
 			Mode:       mode,
 			MatchRegex: regex,
 		}
@@ -167,14 +174,19 @@ func batchCreateGroups(c *gin.Context) {
 				}
 			}
 		} else {
-			// 编译正则（长度已限制，安全）
-			re, err := regexp.Compile(regex)
+			// 编译正则（ECMAScript 模式，支持 (?i) 和负向前瞻等特性）
+			re, err := regexp2.Compile(regex, regexp2.ECMAScript)
 			if err != nil {
 				results[i].Error = fmt.Sprintf("正则编译失败: %v", err)
 				continue
 			}
 			for _, ml := range modelsLower {
-				if re.MatchString(ml.model.Name) {
+				matched, err := re.MatchString(ml.model.Name)
+				if err != nil {
+					results[i].Error = fmt.Sprintf("正则匹配失败: %v", err)
+					break
+				}
+				if matched {
 					items = append(items, model.GroupItem{
 						ChannelID: ml.model.ChannelID,
 						ModelName: ml.model.Name,

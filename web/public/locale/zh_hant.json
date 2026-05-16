@@ -419,6 +419,9 @@
             "disabled": "已停用",
             "autoRegex": "自動正則",
             "manualRegexPlaceholder": "輸入匹配正則...",
+            "matchCount": "匹配 {count} 個模型",
+            "viewMatches": "檢視",
+            "regexSyntaxError": "正則語法錯誤",
             "toast": {
                 "createSuccess": "成功建立 {count} 個分組",
                 "createFailed": "批次建立失敗",

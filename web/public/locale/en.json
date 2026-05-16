@@ -419,6 +419,9 @@
             "disabled": "Disabled",
             "autoRegex": "Auto regex",
             "manualRegexPlaceholder": "Enter match regex...",
+            "matchCount": "{count} models matched",
+            "viewMatches": "View",
+            "regexSyntaxError": "Regex syntax error",
             "toast": {
                 "createSuccess": "Successfully created {count} groups",
                 "createFailed": "Batch creation failed",

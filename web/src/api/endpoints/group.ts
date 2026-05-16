@@ -221,6 +221,7 @@ export interface UngroupedModel {
  */
 export interface QuickGroupItem {
     model_name: string;
+    group_name?: string; // 自定义分组名（为空时使用 model_name）
     mode: number;
     match_regex?: string; // 用户自定义正则（优先于自动生成）
 }
