@@ -412,6 +412,70 @@ func groupRefreshCacheByIDs(ids []int, ctx context.Context) error {
 	return nil
 }
 
+// GroupWithItems 分组及其关联的模型项（用于批量创建）
+type GroupWithItems struct {
+	Group model.Group
+	Items []model.GroupItem // ChannelID 和 ModelName 已设置，GroupID 由事务内填充
+}
+
+// GroupBatchCreate 在单个事务中批量创建分组及其匹配的模型项
+// 任一分组创建失败则整体回滚，保证数据一致性
+func GroupBatchCreate(entries []GroupWithItems, ctx context.Context) error {
+	tx := db.GetDB().WithContext(ctx).Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// 第一步：在事务中逐个创建分组（自增 ID 由 DB 填充）
+	for i := range entries {
+		e := &entries[i]
+		if _, ok := groupMap.Get(e.Group.Name); ok {
+			tx.Rollback()
+			return fmt.Errorf("分组名称已存在，请使用其他名称")
+		}
+		if err := tx.Create(&e.Group).Error; err != nil {
+			tx.Rollback()
+			if isGroupNameDuplicateError(err) {
+				return fmt.Errorf("分组名称已存在，请使用其他名称")
+			}
+			return fmt.Errorf("创建分组失败: %w", err)
+		}
+		// 防止同批次内重名
+		groupMap.Set(e.Group.Name, e.Group)
+	}
+
+	// 第二步：为每个分组的模型项设置 GroupID 并批量插入
+	for i := range entries {
+		e := &entries[i]
+		if len(e.Items) == 0 {
+			continue
+		}
+		for j := range e.Items {
+			e.Items[j].GroupID = e.Group.ID
+		}
+		if err := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "group_id"}, {Name: "channel_id"}, {Name: "model_name"}},
+			DoNothing: true,
+		}).Create(&e.Items).Error; err != nil {
+			tx.Rollback()
+			return fmt.Errorf("添加模型项失败: %w", err)
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return fmt.Errorf("提交事务失败: %w", err)
+	}
+
+	// 事务提交后统一刷新缓存
+	ids := make([]int, len(entries))
+	for i, e := range entries {
+		ids[i] = e.Group.ID
+	}
+	return groupRefreshCacheByIDs(ids, ctx)
+}
+
 // isGroupNameDuplicateError 用于兼容不同数据库返回的唯一约束错误文本，
 // 避免把底层数据库错误直接暴露给前端。
 func isGroupNameDuplicateError(err error) bool {

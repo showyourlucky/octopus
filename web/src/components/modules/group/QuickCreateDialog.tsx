@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useRef, useState, useTransition } from 'react';
 import { Pencil, Search, Zap, X } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useTranslations } from 'next-intl';
@@ -28,6 +28,8 @@ import {
     type QuickGroupItem,
 } from '@/api/endpoints/group';
 import { GroupMode } from '@/api/endpoints/group';
+import { useQueryClient } from '@tanstack/react-query';
+import { useVirtualizer } from '@tanstack/react-virtual';
 
 /** 每个选中模型的独立配置 */
 interface ModelConfig {
@@ -59,12 +61,6 @@ function cleanSuffix(suffix: string): string {
     return result;
 }
 
-function escapeHtml(str: string): string {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-}
-
 /** 根据模型名和排除字段生成正则字符串（用于提交） */
 function generateAutoRegex(name: string, exclude: string[]): string {
     const { prefix, suffix } = parseModelName(name);
@@ -84,35 +80,52 @@ function generateAutoRegex(name: string, exclude: string[]): string {
     return regex;
 }
 
-/** 根据模型名和排除字段生成高亮的正则 HTML */
-function buildRegexDisplay(name: string, exclude: string[]): { html: string; regex: string } {
+/** 根据模型名和排除字段生成高亮的正则 React 元素（替代 dangerouslySetInnerHTML） */
+function buildRegexDisplay(name: string, exclude: string[]): { element: React.ReactNode; regex: string } {
     const { prefix, suffix } = parseModelName(name);
     let regex = '(?i)';
 
-    const parts: string[] = ['<span class="text-yellow-400">(?i)</span>'];
+    const parts: React.ReactNode[] = [
+        <span key="flag" className="text-yellow-400">(?i)</span>,
+    ];
 
     if (exclude.length > 0) {
         const exStr = exclude.map(escapeRegex).join('|');
         regex += `^(?!.*(${exStr}))`;
-        parts.push(`^(?!.*(<span class="text-red-400">${escapeRegex(exStr).replace(/\\(.)/g, '$1')}</span>))`);
+        // 显示时去掉正则转义符号，仅展示用户输入的原始排除词
+        parts.push(
+            <span key="neg">
+                {'^(?!.*('}
+                <span className="text-red-400">{exclude.join('|')}</span>
+                {'))'}
+            </span>,
+        );
     } else {
         regex += '^';
-        parts.push('^');
+        parts.push(<span key="start">^</span>);
     }
 
     regex += `.*${escapeRegex(prefix)}`;
-    parts.push(`.*<span class="text-emerald-400">${escapeRegex(prefix)}</span>`);
+    parts.push(
+        <span key="prefix">
+            .*<span className="text-emerald-400">{prefix}</span>
+        </span>,
+    );
 
     if (suffix) {
         const cleaned = cleanSuffix(suffix);
         regex += `.*${cleaned}`;
-        parts.push(`.*<span class="text-indigo-400">${escapeHtml(cleaned)}</span>`);
+        parts.push(
+            <span key="suffix">
+                .*<span className="text-indigo-400">{cleaned}</span>
+            </span>,
+        );
     }
 
     regex += '.*$';
-    parts.push('.*$');
+    parts.push(<span key="end">.*$</span>);
 
-    return { html: parts.join(''), regex };
+    return { element: parts, regex };
 }
 
 const MODE_OPTIONS = [
@@ -122,8 +135,11 @@ const MODE_OPTIONS = [
     { value: GroupMode.Weighted, labelKey: 'mode.weighted' },
 ];
 
-/** 模型列表项 */
-function ModelItem({
+// 虚拟滚动阈值：超过此数量启用虚拟滚动
+const VIRTUAL_THRESHOLD = 50;
+
+/** 模型列表项（memo 优化，配合虚拟滚动减少重渲染） */
+const ModelItem = memo(function ModelItem({
     model,
     selected,
     onToggle,
@@ -161,10 +177,10 @@ function ModelItem({
             )}
         </button>
     );
-}
+});
 
-/** 单个模型的配置卡片 */
-function ModelConfigCard({
+/** 单个模型的配置卡片（React.memo 防止兄弟卡片变化导致的无效重渲染） */
+const ModelConfigCard = memo(function ModelConfigCard({
     name,
     config,
     useAutoRegex,
@@ -188,7 +204,12 @@ function ModelConfigCard({
     const [excludeInput, setExcludeInput] = useState('');
     const [editingRegex, setEditingRegex] = useState(false);
     const { prefix, suffix } = parseModelName(name);
-    const { html, regex: autoRegex } = buildRegexDisplay(name, config.exclude);
+
+    // useMemo 缓存正则显示结果，仅在 name 或 exclude 变化时重新计算
+    const { element: regexElement, regex: autoRegex } = useMemo(
+        () => buildRegexDisplay(name, config.exclude),
+        [name, config.exclude]
+    );
 
     const handleAddExclude = () => {
         const val = excludeInput.trim();
@@ -291,8 +312,10 @@ function ModelConfigCard({
                             <div
                                 className="font-mono text-xs text-muted-foreground bg-background/50 px-2.5 py-2 rounded-lg break-all leading-relaxed cursor-text"
                                 onClick={() => { onRegexChange(''); setEditingRegex(true); }}
-                                dangerouslySetInnerHTML={{ __html: config.matchRegex ? escapeHtml(config.matchRegex) : html }}
-                            />
+                            >
+                                {/* 使用 React 元素替代 dangerouslySetInnerHTML，避免 XSS 风险 */}
+                                {config.matchRegex ? config.matchRegex : regexElement}
+                            </div>
                         )}
                         {!editingRegex && (
                             <button
@@ -328,13 +351,15 @@ function ModelConfigCard({
             )}
         </div>
     );
-}
+});
 
 /** 快速创建分组对话框主体 */
 export function QuickCreateDialogContent() {
     const { setIsOpen } = useMorphingDialog();
     const t = useTranslations('group');
     const tq = useTranslations('group.quickCreate');
+    const queryClient = useQueryClient();
+    const [, startTransition] = useTransition();
 
     const { data: ungroupedModels = [], isLoading } = useUngroupedModels();
     const batchCreate = useBatchCreateGroups();
@@ -342,6 +367,11 @@ export function QuickCreateDialogContent() {
     const [search, setSearch] = useState('');
     const [useAutoRegex, setUseAutoRegex] = useState(true);
     const [modelConfigs, setModelConfigs] = useState<Record<string, ModelConfig>>({});
+    // 提交中标记：防止 exit 动画期间按钮从"创建中..."闪烁回正常状态导致布局抖动
+    const [submitted, setSubmitted] = useState(false);
+
+    // 左侧模型列表的滚动容器引用（虚拟滚动需要）
+    const listScrollRef = useRef<HTMLDivElement>(null);
 
     const selectedNames = useMemo(() => Object.keys(modelConfigs), [modelConfigs]);
 
@@ -355,6 +385,16 @@ export function QuickCreateDialogContent() {
         () => filteredModels.length > 0 && filteredModels.every((m) => m.name in modelConfigs),
         [filteredModels, modelConfigs]
     );
+
+    // 虚拟滚动：仅当模型数量超过阈值时启用
+    const useVirtualList = filteredModels.length > VIRTUAL_THRESHOLD;
+
+    const virtualizer = useVirtualizer({
+        count: filteredModels.length,
+        getScrollElement: () => listScrollRef.current,
+        estimateSize: () => 42, // ModelItem 预估行高
+        overscan: 5,
+    });
 
     const toggleModel = useCallback((name: string) => {
         setModelConfigs((prev) => {
@@ -460,6 +500,7 @@ export function QuickCreateDialogContent() {
             };
         });
 
+        setSubmitted(true);
         batchCreate.mutate(
             { groups },
             {
@@ -473,14 +514,23 @@ export function QuickCreateDialogContent() {
                     } else {
                         toast.success(tq('toast.createSuccess', { count: successCount }));
                     }
-                    setIsOpen(false);
+                    // 使用 startTransition 延迟关闭，让 exit 动画在按钮状态稳定后执行
+                    startTransition(() => {
+                        setIsOpen(false);
+                    });
+                    // 在关闭动画结束后刷新缓存（使用 requestAnimationFrame 确保在下一帧执行）
+                    requestAnimationFrame(() => {
+                        queryClient.invalidateQueries({ queryKey: ['groups', 'list'] });
+                        queryClient.invalidateQueries({ queryKey: ['groups', 'ungrouped-models'] });
+                    });
                 },
                 onError: (error) => {
+                    setSubmitted(false);
                     toast.error(tq('toast.createFailed'), { description: error.message });
                 },
             }
         );
-    }, [selectedNames, modelConfigs, useAutoRegex, batchCreate, setIsOpen, tq]);
+    }, [selectedNames, modelConfigs, useAutoRegex, batchCreate, setIsOpen, tq, queryClient, startTransition]);
 
     return (
         <div className="w-screen max-w-full md:max-w-3xl h-[calc(100vh-2rem)] min-h-0 flex flex-col">
@@ -535,7 +585,7 @@ export function QuickCreateDialogContent() {
 
                 {/* 主内容区：左右布局 */}
                 <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 gap-3 overflow-hidden">
-                    {/* 左侧：待选模型列表 */}
+                    {/* 左侧：待选模型列表（支持虚拟滚动） */}
                     <div className="flex flex-col min-h-0 rounded-xl border border-border/50 bg-muted/30 overflow-hidden">
                         <div className="px-3 py-2 border-b border-border/30 bg-muted/50 shrink-0">
                             <span className="text-sm font-medium">
@@ -545,26 +595,56 @@ export function QuickCreateDialogContent() {
                                 </span>
                             </span>
                         </div>
-                        <div className="flex-1 min-h-0 overflow-y-auto">
-                            {isLoading ? (
-                                <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
-                                    加载中...
+                        {isLoading ? (
+                            <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+                                加载中...
+                            </div>
+                        ) : filteredModels.length === 0 ? (
+                            <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+                                {tq('noMatch')}
+                            </div>
+                        ) : useVirtualList ? (
+                            // 虚拟滚动模式：大量模型时仅渲染可见区域
+                            <div ref={listScrollRef} className="flex-1 min-h-0 overflow-y-auto">
+                                <div style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}>
+                                    {virtualizer.getVirtualItems().map((virtualRow) => {
+                                        const m = filteredModels[virtualRow.index];
+                                        return (
+                                            <div
+                                                key={`${m.channel_id}-${m.name}`}
+                                                style={{
+                                                    position: 'absolute',
+                                                    top: 0,
+                                                    left: 0,
+                                                    width: '100%',
+                                                    transform: `translateY(${virtualRow.start}px)`,
+                                                }}
+                                                ref={virtualizer.measureElement}
+                                                data-index={virtualRow.index}
+                                            >
+                                                <ModelItem
+                                                    model={m}
+                                                    selected={m.name in modelConfigs}
+                                                    onToggle={() => toggleModel(m.name)}
+                                                />
+                                            </div>
+                                        );
+                                    })}
                                 </div>
-                            ) : filteredModels.length === 0 ? (
-                                <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
-                                    {tq('noMatch')}
-                                </div>
-                            ) : (
-                                filteredModels.map((m) => (
+                            </div>
+                        ) : (
+                            // 普通模式：少量模型时直接渲染
+                            <div className="flex-1 min-h-0 overflow-y-auto">
+                                {filteredModels.map((m) => (
                                     <ModelItem
                                         key={`${m.channel_id}-${m.name}`}
                                         model={m}
                                         selected={m.name in modelConfigs}
                                         onToggle={() => toggleModel(m.name)}
                                     />
-                                ))
-                            )}
-                        </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     {/* 右侧：已选模型配置 */}
@@ -623,10 +703,10 @@ export function QuickCreateDialogContent() {
                     <Button
                         type="button"
                         className="rounded-xl h-10"
-                        disabled={selectedNames.length === 0 || batchCreate.isPending}
+                        disabled={selectedNames.length === 0 || batchCreate.isPending || submitted}
                         onClick={handleBatchCreate}
                     >
-                        {batchCreate.isPending ? tq('creating') : `${tq('batchCreate')} (${selectedNames.length})`}
+                        {(batchCreate.isPending || submitted) ? tq('creating') : `${tq('batchCreate')} (${selectedNames.length})`}
                     </Button>
                 </div>
             </div>

@@ -35,6 +35,9 @@ type BatchCreateResult struct {
 	Error      string `json:"error,omitempty"`    // 错误信息
 }
 
+// regexMaxLen 正则表达式最大长度限制，防止 ReDoS 攻击
+const regexMaxLen = 512
+
 func init() {
 	router.NewGroupRouter("/api/v1/group-template").
 		Use(middleware.Auth()).
@@ -86,8 +89,15 @@ func getUngroupedModels(c *gin.Context) {
 	resp.Success(c, ungrouped)
 }
 
-// batchCreateGroups 批量创建分组
-// 对每个选中的模型：解析名称生成正则，创建分组，匹配渠道模型并添加
+// modelWithLower 携带预计算小写名的模型（避免循环内重复 ToLower）
+type modelWithLower struct {
+	model model.LLMChannel
+	lower string
+}
+
+// batchCreateGroups 批量创建分组（事务保护）
+// 第一阶段：验证请求、编译正则、匹配模型（事务外）
+// 第二阶段：在单个事务中批量创建分组和模型项（任一失败则整体回滚）
 func batchCreateGroups(c *gin.Context) {
 	var req BatchCreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -109,12 +119,19 @@ func batchCreateGroups(c *gin.Context) {
 		return
 	}
 
-	results := make([]BatchCreateResult, 0, len(req.Groups))
+	// 预计算所有模型名的小写版本，避免循环内重复调用 strings.ToLower
+	modelsLower := make([]modelWithLower, len(allModels))
+	for i, m := range allModels {
+		modelsLower[i] = modelWithLower{model: m, lower: strings.ToLower(m.Name)}
+	}
 
-	for _, item := range req.Groups {
-		result := BatchCreateResult{
-			ModelName: item.ModelName,
-		}
+	// 第一阶段：验证请求项并匹配模型
+	results := make([]BatchCreateResult, len(req.Groups))
+	entries := make([]op.GroupWithItems, 0, len(req.Groups))
+	entryIndices := make([]int, 0, len(req.Groups)) // entries[i] 对应 req.Groups[entryIndices[i]]
+
+	for i, item := range req.Groups {
+		results[i] = BatchCreateResult{ModelName: item.ModelName}
 
 		// 确定分组模式
 		mode := model.GroupMode(item.Mode)
@@ -122,63 +139,70 @@ func batchCreateGroups(c *gin.Context) {
 			mode = model.GroupModeRoundRobin
 		}
 
-		// 使用前端传入的正则（为空则使用 model_name 精确匹配）
 		regex := strings.TrimSpace(item.MatchRegex)
 
-		// 创建分组
-		group := &model.Group{
+		// ReDoS 防护：限制正则长度
+		if len(regex) > regexMaxLen {
+			results[i].Error = fmt.Sprintf("正则表达式过长（最大 %d 字符）", regexMaxLen)
+			continue
+		}
+
+		group := model.Group{
 			Name:       item.ModelName,
 			Mode:       mode,
 			MatchRegex: regex,
 		}
 
-		if err := op.GroupCreate(group, ctx); err != nil {
-			result.Error = err.Error()
-			results = append(results, result)
-			continue
-		}
-
-		// 正则为空时使用 model_name 模糊匹配（大小写不敏感包含，与手动添加分组行为一致）
-		matched := make([]model.GroupIDAndLLMName, 0)
+		// 匹配渠道模型
+		var items []model.GroupItem
 		if regex == "" {
+			// 无正则时使用模型名模糊匹配（大小写不敏感包含）
 			modelNameLower := strings.ToLower(item.ModelName)
-			for _, m := range allModels {
-				if strings.Contains(strings.ToLower(m.Name), modelNameLower) {
-					matched = append(matched, model.GroupIDAndLLMName{
-						ChannelID: m.ChannelID,
-						ModelName: m.Name,
+			for _, ml := range modelsLower {
+				if strings.Contains(ml.lower, modelNameLower) {
+					items = append(items, model.GroupItem{
+						ChannelID: ml.model.ChannelID,
+						ModelName: ml.model.Name,
 					})
 				}
 			}
 		} else {
-			// 用正则匹配渠道模型，收集匹配的 (ChannelID, ModelName)
+			// 编译正则（长度已限制，安全）
 			re, err := regexp.Compile(regex)
 			if err != nil {
-				result.Error = fmt.Sprintf("正则编译失败: %v", err)
-				results = append(results, result)
+				results[i].Error = fmt.Sprintf("正则编译失败: %v", err)
 				continue
 			}
-			for _, m := range allModels {
-				if re.MatchString(m.Name) {
-					matched = append(matched, model.GroupIDAndLLMName{
-						ChannelID: m.ChannelID,
-						ModelName: m.Name,
+			for _, ml := range modelsLower {
+				if re.MatchString(ml.model.Name) {
+					items = append(items, model.GroupItem{
+						ChannelID: ml.model.ChannelID,
+						ModelName: ml.model.Name,
 					})
 				}
 			}
 		}
 
-		result.MatchCount = len(matched)
+		results[i].MatchCount = len(items)
+		entries = append(entries, op.GroupWithItems{Group: group, Items: items})
+		entryIndices = append(entryIndices, i)
+	}
 
-		// 批量添加匹配的模型到分组
-		if len(matched) > 0 {
-			if err := op.GroupItemBatchAdd(group.ID, matched, ctx); err != nil {
-				result.Error = fmt.Sprintf("添加模型失败: %v", err)
+	// 第二阶段：在事务中批量创建
+	if len(entries) > 0 {
+		if err := op.GroupBatchCreate(entries, ctx); err != nil {
+			// 事务整体失败，标记所有待创建项为失败
+			for _, idx := range entryIndices {
+				if results[idx].Error == "" {
+					results[idx].Error = err.Error()
+				}
+			}
+		} else {
+			// 事务成功，填充 GroupID
+			for j, entry := range entries {
+				results[entryIndices[j]].GroupID = entry.Group.ID
 			}
 		}
-
-		result.GroupID = group.ID
-		results = append(results, result)
 	}
 
 	resp.Success(c, results)

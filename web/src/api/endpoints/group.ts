@@ -256,21 +256,12 @@ export function useUngroupedModels() {
 
 /**
  * 批量创建分组 Hook
+ * 缓存失效由调用方在 onSuccess 中自行管理，避免 dialog exit 动画期间触发 refetch 导致卡顿
  */
 export function useBatchCreateGroups() {
-    const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async (data: BatchCreateRequest) => {
             return apiClient.post<BatchCreateResult[]>('/api/v1/group-template/batch-create', data);
-        },
-        onSuccess: () => {
-            logger.log('批量创建分组成功');
-            queryClient.invalidateQueries({ queryKey: ['groups', 'list'] });
-            queryClient.invalidateQueries({ queryKey: ['groups', 'ungrouped-models'] });
-        },
-        onError: (error) => {
-            logger.error('批量创建分组失败:', error);
         },
     });
 }
