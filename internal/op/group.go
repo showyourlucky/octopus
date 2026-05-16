@@ -3,6 +3,7 @@ package op
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/bestruirui/octopus/internal/db"
 	"github.com/bestruirui/octopus/internal/model"
@@ -61,7 +62,13 @@ func GroupGetEnabledMap(name string, ctx context.Context) (model.Group, error) {
 }
 
 func GroupCreate(group *model.Group, ctx context.Context) error {
+	if _, ok := groupMap.Get(group.Name); ok {
+		return fmt.Errorf("分组名称已存在，请使用其他名称")
+	}
 	if err := db.GetDB().WithContext(ctx).Create(group).Error; err != nil {
+		if isGroupNameDuplicateError(err) {
+			return fmt.Errorf("分组名称已存在，请使用其他名称")
+		}
 		return err
 	}
 	groupCache.Set(group.ID, *group)
@@ -87,6 +94,11 @@ func GroupUpdate(req *model.GroupUpdateRequest, ctx context.Context) (*model.Gro
 	updates := model.Group{ID: req.ID}
 
 	if req.Name != nil {
+		if *req.Name != oldName {
+			if _, ok := groupMap.Get(*req.Name); ok {
+				return nil, fmt.Errorf("分组名称已存在，请使用其他名称")
+			}
+		}
 		selectFields = append(selectFields, "name")
 		updates.Name = *req.Name
 	}
@@ -110,6 +122,9 @@ func GroupUpdate(req *model.GroupUpdateRequest, ctx context.Context) (*model.Gro
 	if len(selectFields) > 0 {
 		if err := tx.Model(&model.Group{}).Where("id = ?", req.ID).Select(selectFields).Updates(&updates).Error; err != nil {
 			tx.Rollback()
+			if isGroupNameDuplicateError(err) {
+				return nil, fmt.Errorf("分组名称已存在，请使用其他名称")
+			}
 			return nil, fmt.Errorf("failed to update group: %w", err)
 		}
 	}
@@ -395,4 +410,16 @@ func groupRefreshCacheByIDs(ids []int, ctx context.Context) error {
 		groupMap.Set(group.Name, group)
 	}
 	return nil
+}
+
+// isGroupNameDuplicateError 用于兼容不同数据库返回的唯一约束错误文本，
+// 避免把底层数据库错误直接暴露给前端。
+func isGroupNameDuplicateError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if strings.Contains(err.Error(), "UNIQUE constraint failed: groups.name") {
+		return true
+	}
+	return false
 }
