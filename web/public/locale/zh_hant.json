@@ -397,7 +397,34 @@
             "failover": "故障轉移",
             "weighted": "加權分配"
         },
-        "empty": "暫無分組，點擊左上角按鈕建立"
+        "empty": "暫無分組，點擊左上角按鈕建立",
+        "quickCreate": {
+            "title": "快速建立分組",
+            "searchPlaceholder": "搜尋模型名稱...",
+            "selectAll": "全選",
+            "ungroupedModels": "待選模型（未分組）",
+            "selectedConfig": "已選模型配置",
+            "configHint": "勾選上方模型後，在此配置每個分組的模式和排除欄位",
+            "mode": "分組模式",
+            "exclude": "排除欄位",
+            "excludePlaceholder": "輸入排除詞",
+            "excludeAdd": "+ 排除",
+            "regexPreview": "正則預覽",
+            "prefix": "前綴",
+            "suffix": "後綴",
+            "batchCreate": "批次建立",
+            "creating": "建立中...",
+            "selectedCount": "已選擇 {count} 個模型",
+            "noMatch": "沒有匹配的模型",
+            "disabled": "已停用",
+            "autoRegex": "自動正則",
+            "manualRegexPlaceholder": "輸入匹配正則...",
+            "toast": {
+                "createSuccess": "成功建立 {count} 個分組",
+                "createFailed": "批次建立失敗",
+                "noneSelected": "請至少選擇一個模型"
+            }
+        }
     },
     "model": {
         "create": {

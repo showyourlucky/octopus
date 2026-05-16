@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowUpAZ, Clock3, LayoutGrid, List, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
+import { ArrowUpAZ, Clock3, LayoutGrid, List, Plus, Search, SlidersHorizontal, X, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
     MorphingDialog,
@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { useNavStore, type NavItem } from '@/components/modules/navbar';
 import { CreateDialogContent as ChannelCreateContent } from '@/components/modules/channel/Create';
 import { CreateDialogContent as GroupCreateContent } from '@/components/modules/group/Create';
+import { QuickCreateDialogContent } from '@/components/modules/group/QuickCreateDialog';
 import { CreateDialogContent as ModelCreateContent } from '@/components/modules/model/Create';
 import { useTranslations } from 'next-intl';
 import { useSearchStore } from './search-store';
@@ -333,6 +334,21 @@ export function Toolbar() {
                         </MorphingDialogContent>
                     </MorphingDialogContainer>
                 </MorphingDialog>
+
+                {/* 快速创建分组按钮（仅在分组页面显示） */}
+                {toolbarItem === 'group' && (
+                    <MorphingDialog>
+                        <MorphingDialogTrigger className={buttonVariants({ variant: "ghost", size: "icon", className: "rounded-xl transition-none hover:bg-transparent text-muted-foreground hover:text-foreground" })}>
+                            <Zap className="size-4 transition-colors duration-300" />
+                        </MorphingDialogTrigger>
+
+                        <MorphingDialogContainer>
+                            <MorphingDialogContent className="w-fit max-w-full bg-card text-card-foreground px-6 py-4 rounded-3xl custom-shadow max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+                                <QuickCreateDialogContent />
+                            </MorphingDialogContent>
+                        </MorphingDialogContainer>
+                    </MorphingDialog>
+                )}
             </motion.div>
         </AnimatePresence>
     );

@@ -397,7 +397,34 @@
             "failover": "故障转移",
             "weighted": "加权分配"
         },
-        "empty": "暂无分组，点击左上角按钮创建"
+        "empty": "暂无分组，点击左上角按钮创建",
+        "quickCreate": {
+            "title": "快速创建分组",
+            "searchPlaceholder": "搜索模型名称...",
+            "selectAll": "全选",
+            "ungroupedModels": "待选模型（未分组）",
+            "selectedConfig": "已选模型配置",
+            "configHint": "勾选上方模型后，在此配置每个分组的模式和排除字段",
+            "mode": "分组模式",
+            "exclude": "排除字段",
+            "excludePlaceholder": "输入排除词",
+            "excludeAdd": "+ 排除",
+            "regexPreview": "正则预览",
+            "prefix": "前缀",
+            "suffix": "后缀",
+            "batchCreate": "批量创建",
+            "creating": "创建中...",
+            "selectedCount": "已选择 {count} 个模型",
+            "noMatch": "没有匹配的模型",
+            "disabled": "已禁用",
+            "autoRegex": "自动正则",
+            "manualRegexPlaceholder": "输入匹配正则...",
+            "toast": {
+                "createSuccess": "成功创建 {count} 个分组",
+                "createFailed": "批量创建失败",
+                "noneSelected": "请至少选择一个模型"
+            }
+        }
     },
     "model": {
         "create": {

@@ -181,10 +181,10 @@ export function useDeleteGroup() {
 
 /**
  * 自动添加分组 item Hook
- *
+*
  * 后端路由: POST /api/v1/group/auto-add-item
  * Body: { id: number }
- *
+*
  * @example
  * const autoAdd = useAutoAddGroupItem();
  * autoAdd.mutate(1); // 为 groupId=1 自动添加匹配的 items
@@ -206,3 +206,71 @@ export function useDeleteGroup() {
 //     });
 // }
 
+/**
+ * 未分组模型信息（用于快速创建分组）
+ */
+export interface UngroupedModel {
+    name: string;
+    enabled: boolean;
+    channel_id: number;
+    channel_name: string;
+}
+
+/**
+ * 快速创建分组的单个模型配置
+ */
+export interface QuickGroupItem {
+    model_name: string;
+    mode: number;
+    match_regex?: string; // 用户自定义正则（优先于自动生成）
+}
+
+/**
+ * 批量创建分组请求
+ */
+export interface BatchCreateRequest {
+    groups: QuickGroupItem[];
+}
+
+/**
+ * 批量创建分组的单个结果
+ */
+export interface BatchCreateResult {
+    model_name: string;
+    group_id?: number;
+    match_count: number;
+    error?: string;
+}
+
+/**
+ * 获取未分组模型列表 Hook
+ */
+export function useUngroupedModels() {
+    return useQuery({
+        queryKey: ['groups', 'ungrouped-models'],
+        queryFn: async () => {
+            return apiClient.get<UngroupedModel[]>('/api/v1/group-template/ungrouped-models');
+        },
+    });
+}
+
+/**
+ * 批量创建分组 Hook
+ */
+export function useBatchCreateGroups() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (data: BatchCreateRequest) => {
+            return apiClient.post<BatchCreateResult[]>('/api/v1/group-template/batch-create', data);
+        },
+        onSuccess: () => {
+            logger.log('批量创建分组成功');
+            queryClient.invalidateQueries({ queryKey: ['groups', 'list'] });
+            queryClient.invalidateQueries({ queryKey: ['groups', 'ungrouped-models'] });
+        },
+        onError: (error) => {
+            logger.error('批量创建分组失败:', error);
+        },
+    });
+}

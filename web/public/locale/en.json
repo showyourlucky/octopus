@@ -397,7 +397,34 @@
             "failover": "Failover",
             "weighted": "Weighted"
         },
-        "empty": "No groups yet, click the button above to create one"
+        "empty": "No groups yet, click the button above to create one",
+        "quickCreate": {
+            "title": "Quick Create Groups",
+            "searchPlaceholder": "Search model names...",
+            "selectAll": "Select All",
+            "ungroupedModels": "Available Models (Ungrouped)",
+            "selectedConfig": "Selected Model Configuration",
+            "configHint": "Select models above, then configure mode and exclude fields for each group",
+            "mode": "Group Mode",
+            "exclude": "Exclude",
+            "excludePlaceholder": "Enter exclude term",
+            "excludeAdd": "+ Exclude",
+            "regexPreview": "Regex Preview",
+            "prefix": "prefix",
+            "suffix": "suffix",
+            "batchCreate": "Batch Create",
+            "creating": "Creating...",
+            "selectedCount": "{count} models selected",
+            "noMatch": "No matching models",
+            "disabled": "Disabled",
+            "autoRegex": "Auto regex",
+            "manualRegexPlaceholder": "Enter match regex...",
+            "toast": {
+                "createSuccess": "Successfully created {count} groups",
+                "createFailed": "Batch creation failed",
+                "noneSelected": "Please select at least one model"
+            }
+        }
     },
     "model": {
         "create": {
