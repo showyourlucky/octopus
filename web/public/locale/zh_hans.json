@@ -361,7 +361,9 @@
             "submitting": "创建中..."
         },
         "card": {
-            "empty": "暂无规则"
+            "empty": "暂无规则",
+            "models": "模型（{count}）",
+            "loadingModels": "正在展开模型..."
         },
         "detail": {
             "actions": {

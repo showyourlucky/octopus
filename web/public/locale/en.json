@@ -361,7 +361,9 @@
             "submitting": "Creating..."
         },
         "card": {
-            "empty": "No rules"
+            "empty": "No rules",
+            "models": "Models ({count})",
+            "loadingModels": "Expanding models..."
         },
         "detail": {
             "actions": {

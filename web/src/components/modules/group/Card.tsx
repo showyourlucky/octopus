@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Trash2, X, Pencil } from 'lucide-react';
+import { ChevronDown, Trash2, X, Pencil } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { type Group, useDeleteGroup, useUpdateGroup } from '@/api/endpoints/group';
 import { useModelChannelList } from '@/api/endpoints/model';
@@ -22,9 +22,15 @@ import {
     MorphingDialogContent,
     MorphingDialogDescription,
     MorphingDialogTitle,
-    MorphingDialogTrigger,
     useMorphingDialog,
 } from '@/components/ui/morphing-dialog';
+
+function getMembersLoadingDelay(count: number): number {
+    if (count <= 8) return 0;
+    if (count <= 30) return 80;
+    if (count <= 80) return 160;
+    return 240;
+}
 
 interface EditDialogContentProps {
     group: Group;
@@ -68,6 +74,26 @@ function EditDialogContent({ group, displayMembers, isSubmitting, onSubmit }: Ed
     );
 }
 
+function EditDialogTriggerButton({ label }: { label: string }) {
+    const { setIsOpen } = useMorphingDialog();
+
+    return (
+        <Tooltip side="top" sideOffset={10} align="center">
+            <TooltipTrigger asChild>
+                <button
+                    type="button"
+                    onClick={() => setIsOpen(true)}
+                    aria-label={label}
+                    className="p-1.5 rounded-lg transition-colors hover:bg-muted text-muted-foreground hover:text-foreground"
+                >
+                    <Pencil className="size-4" />
+                </button>
+            </TooltipTrigger>
+            <TooltipContent>{label}</TooltipContent>
+        </Tooltip>
+    );
+}
+
 export function GroupCard({ group }: { group: Group }) {
     const t = useTranslations('group');
     const updateGroup = useUpdateGroup();
@@ -75,9 +101,15 @@ export function GroupCard({ group }: { group: Group }) {
     const { data: modelChannels = [] } = useModelChannelList();
 
     const [confirmDelete, setConfirmDelete] = useState(false);
-    const [members, setMembers] = useState<SelectedMember[]>([]);
+    const [memberDraft, setMemberDraft] = useState<{ sourceKey: string; members: SelectedMember[] } | null>(null);
+    // 默认折叠模型列表，避免分组页一次性渲染大量模型导致滚动卡顿。
+    const [isMembersOpen, setIsMembersOpen] = useState(false);
+    const [isMembersReady, setIsMembersReady] = useState(false);
     const isDragging = useRef(false);
     const weightTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const openFrameRef = useRef<number | null>(null);
+    const contentFrameRef = useRef<number | null>(null);
+    const loadingTimerRef = useRef<NodeJS.Timeout | null>(null);
     const membersRef = useRef<SelectedMember[]>([]);
 
     const channelNameByKey = useMemo(() => buildChannelNameByModelKey(modelChannels), [modelChannels]);
@@ -104,9 +136,29 @@ export function GroupCard({ group }: { group: Group }) {
         [group.items, channelNameByKey, enabledByKey]
     );
 
-    useEffect(() => {
-        if (!isDragging.current) setMembers([...displayMembers]);
-    }, [displayMembers]);
+    const displayMembersKey = useMemo(
+        () => displayMembers
+            .map((member) => [
+                member.item_id ?? '',
+                member.channel_id,
+                member.name,
+                member.enabled,
+                member.weight ?? 1,
+            ].join(':'))
+            .join('|'),
+        [displayMembers]
+    );
+
+    const members = memberDraft?.sourceKey === displayMembersKey ? memberDraft.members : displayMembers;
+
+    const updateMemberDraft = useCallback((updater: (current: SelectedMember[]) => SelectedMember[]) => {
+        setMemberDraft((currentDraft) => {
+            const currentMembers = currentDraft?.sourceKey === displayMembersKey
+                ? currentDraft.members
+                : displayMembers;
+            return { sourceKey: displayMembersKey, members: updater(currentMembers) };
+        });
+    }, [displayMembers, displayMembersKey]);
 
     useEffect(() => {
         membersRef.current = members;
@@ -114,6 +166,14 @@ export function GroupCard({ group }: { group: Group }) {
 
     useEffect(() => {
         return () => { if (weightTimerRef.current) clearTimeout(weightTimerRef.current); };
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            if (openFrameRef.current !== null) cancelAnimationFrame(openFrameRef.current);
+            if (contentFrameRef.current !== null) cancelAnimationFrame(contentFrameRef.current);
+            if (loadingTimerRef.current !== null) clearTimeout(loadingTimerRef.current);
+        };
     }, []);
 
     const onSuccess = useCallback(() => toast.success(t('toast.updated')), [t]);
@@ -156,7 +216,7 @@ export function GroupCard({ group }: { group: Group }) {
     }, [members, group.id, updateGroup, onSuccess, onError]);
 
     const handleWeightChange = useCallback((id: string, weight: number) => {
-        setMembers((prev) => prev.map((m) => m.id === id ? { ...m, weight } : m));
+        updateMemberDraft((prev) => prev.map((m) => m.id === id ? { ...m, weight } : m));
         if (weightTimerRef.current) clearTimeout(weightTimerRef.current);
         weightTimerRef.current = setTimeout(() => {
             const member = membersRef.current.find((m) => m.id === id);
@@ -168,7 +228,43 @@ export function GroupCard({ group }: { group: Group }) {
                 { onSuccess, onError }
             );
         }, 500);
-    }, [group.id, priorityByItemId, updateGroup, onSuccess, onError]);
+    }, [group.id, priorityByItemId, updateGroup, updateMemberDraft, onSuccess, onError]);
+
+    const toggleMembersOpen = useCallback(() => {
+        if (openFrameRef.current !== null) cancelAnimationFrame(openFrameRef.current);
+        if (contentFrameRef.current !== null) cancelAnimationFrame(contentFrameRef.current);
+        if (loadingTimerRef.current !== null) clearTimeout(loadingTimerRef.current);
+        openFrameRef.current = null;
+        contentFrameRef.current = null;
+        loadingTimerRef.current = null;
+
+        setIsMembersOpen((open) => {
+            const nextOpen = !open;
+            setIsMembersReady(false);
+
+            if (nextOpen) {
+                // 先让展开容器和轻量占位完成首帧绘制，并保证 loading 可被感知，再挂载拖拽列表。
+                openFrameRef.current = requestAnimationFrame(() => {
+                    contentFrameRef.current = requestAnimationFrame(() => {
+                        openFrameRef.current = null;
+                        contentFrameRef.current = null;
+                        const delay = getMembersLoadingDelay(displayMembers.length);
+                        if (delay === 0) {
+                            setIsMembersReady(true);
+                            return;
+                        }
+
+                        loadingTimerRef.current = setTimeout(() => {
+                            loadingTimerRef.current = null;
+                            setIsMembersReady(true);
+                        }, delay);
+                    });
+                });
+            }
+
+            return nextOpen;
+        });
+    }, [displayMembers.length]);
 
     const handleSubmitEdit = useCallback((values: GroupEditorValues, onDone?: () => void) => {
         if (!group.id) return;
@@ -254,14 +350,7 @@ export function GroupCard({ group }: { group: Group }) {
 
                 <div className="flex items-center gap-1 shrink-0">
                     <MorphingDialog>
-                        <MorphingDialogTrigger className="p-1.5 rounded-lg transition-colors hover:bg-muted text-muted-foreground hover:text-foreground">
-                            <Tooltip side="top" sideOffset={10} align="center">
-                                <TooltipTrigger asChild>
-                                    <Pencil className="size-4" />
-                                </TooltipTrigger>
-                                <TooltipContent>{t('detail.actions.edit')}</TooltipContent>
-                            </Tooltip>
-                        </MorphingDialogTrigger>
+                        <EditDialogTriggerButton label={t('detail.actions.edit')} />
 
                         <MorphingDialogContainer>
                             <MorphingDialogContent className="relative w-screen max-w-full md:max-w-4xl bg-card text-card-foreground px-6 py-4 rounded-3xl h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
@@ -288,10 +377,10 @@ export function GroupCard({ group }: { group: Group }) {
                     </Tooltip>
                     {!confirmDelete && (
                         <Tooltip side="top" sideOffset={10} align="center">
-                            <TooltipTrigger>
-                                <motion.button layoutId={`delete-btn-group-${group.id}`} type="button" onClick={() => setConfirmDelete(true)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
+                            <TooltipTrigger asChild>
+                                <button type="button" onClick={() => setConfirmDelete(true)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
                                     <Trash2 className="size-4" />
-                                </motion.button>
+                                </button>
                             </TooltipTrigger>
                             <TooltipContent>{t('detail.actions.delete')}</TooltipContent>
                         </Tooltip>
@@ -337,20 +426,74 @@ export function GroupCard({ group }: { group: Group }) {
                 ))}
             </div>
 
-            <section className="rounded-xl border border-border/50 bg-muted/30 overflow-hidden relative h-101">
-                <MemberList
-                    members={members}
-                    onReorder={setMembers}
-                    onRemove={handleRemoveMember}
-                    onWeightChange={handleWeightChange}
-                    onDragStart={handleDragStart}
-                    onDrop={handleDropReorder}
-                    onDragFinish={handleDragFinish}
-                    autoScrollOnAdd={false}
-                    showWeight={group.mode === GroupMode.Weighted}
-                    layoutScope={`card-${group.id ?? 'unknown'}`}
+            <button
+                type="button"
+                aria-expanded={isMembersOpen}
+                aria-controls={`group-members-${group.id ?? 'unknown'}`}
+                onClick={toggleMembersOpen}
+                className="flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-muted/30 px-3 py-2 text-left transition-colors hover:bg-muted/50"
+            >
+                <span className="min-w-0 text-sm font-medium text-foreground">
+                    {t('card.models', { count: displayMembers.length })}
+                </span>
+                <ChevronDown
+                    className={cn(
+                        'size-4 shrink-0 text-muted-foreground transition-transform duration-200',
+                        isMembersOpen && 'rotate-180'
+                    )}
                 />
-            </section>
+            </button>
+
+            <AnimatePresence initial={false}>
+                {isMembersOpen && (
+                    <motion.section
+                        id={`group-members-${group.id ?? 'unknown'}`}
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 404, opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2, ease: 'easeOut' }}
+                        className="mt-3 rounded-xl border border-border/50 bg-muted/30 overflow-hidden relative"
+                    >
+                        {isMembersReady ? (
+                            <MemberList
+                                members={members}
+                                onReorder={(nextMembers) => updateMemberDraft(() => nextMembers)}
+                                onRemove={handleRemoveMember}
+                                onWeightChange={handleWeightChange}
+                                onDragStart={handleDragStart}
+                                onDrop={handleDropReorder}
+                                onDragFinish={handleDragFinish}
+                                autoScrollOnAdd={false}
+                                showWeight={group.mode === GroupMode.Weighted}
+                                layoutScope={`card-${group.id ?? 'unknown'}`}
+                            />
+                        ) : (
+                            <div className="flex h-full flex-col gap-3 p-3 text-muted-foreground">
+                                <div className="flex items-center justify-center gap-2 py-2">
+                                    <span className="size-6 rounded-full border-2 border-muted-foreground/25 border-t-primary animate-spin" />
+                                    <span className="text-xs font-medium">{t('card.loadingModels')}</span>
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                    {[0, 1, 2, 3, 4].map((index) => (
+                                        <div
+                                            key={index}
+                                            className="flex items-center gap-2 rounded-lg border border-border/40 bg-background/70 px-2.5 py-2"
+                                        >
+                                            <span className="size-5 rounded-md bg-muted animate-pulse" />
+                                            <span className="size-4 rounded bg-muted animate-pulse" />
+                                            <span className="flex-1 space-y-1.5">
+                                                <span className="block h-3 w-3/4 rounded bg-muted animate-pulse" />
+                                                <span className="block h-2 w-1/2 rounded bg-muted/80 animate-pulse" />
+                                            </span>
+                                            <span className="size-4 rounded bg-muted animate-pulse" />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </motion.section>
+                )}
+            </AnimatePresence>
         </article >
     );
 }
