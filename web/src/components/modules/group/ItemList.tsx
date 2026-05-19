@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { memo, useEffect, useId, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import { Layers, GripVertical, X, Trash2, ArrowUpToLine, ArrowDownToLine } from 'lucide-react';
 import {
     DragDropContext,
@@ -9,12 +11,17 @@ import {
     type DraggableProvided,
     type DropResult,
 } from '@hello-pangea/dnd';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { getModelIcon } from '@/lib/model-icons';
 import type { LLMChannel } from '@/api/endpoints/model';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/animate-ui/components/animate/tooltip';
 import { useTranslations } from 'next-intl';
+
+const VIRTUAL_MEMBER_THRESHOLD = 80;
+const MEMBER_ROW_ESTIMATE_SIZE = 45;
+const dragPortalRoot = typeof document === 'undefined' ? null : document.body;
 
 export interface SelectedMember extends LLMChannel {
     id: string;
@@ -36,7 +43,14 @@ type MemberItemDnd = {
     isDragging: boolean;
 };
 
-function MemberItem({
+const memberItemContainStyle: CSSProperties = {
+    // 展开分组里模型很多时，浏览器可跳过视口外行的绘制，降低滚动卡顿。
+    contentVisibility: 'auto',
+    containIntrinsicSize: '44px',
+    contain: 'layout paint style',
+};
+
+const MemberItem = memo(function MemberItem({
     member,
     onRemove,
     onWeightChange,
@@ -57,7 +71,7 @@ function MemberItem({
     showWeight?: boolean;
     showConfirmDelete?: boolean;
     layoutScope?: string;
-    dnd: MemberItemDnd;
+    dnd?: MemberItemDnd;
     onMoveToTop?: (index: number) => void;
     onMoveToBottom?: (index: number) => void;
 }) {
@@ -68,19 +82,13 @@ function MemberItem({
 
     return (
         <div
-            // DnD libraries provide imperative refs/props; the hook lint rule (`react-hooks/refs`)
-            // flags this pattern, but it's safe and required for correct drag behavior.
-            // eslint-disable-next-line react-hooks/refs
-            ref={dnd.innerRef}
-            // eslint-disable-next-line react-hooks/refs
-            {...dnd.draggableProps}
+            ref={dnd?.innerRef}
+            {...(dnd?.draggableProps ?? {})}
             className={cn('rounded-lg grid transition-[grid-template-rows] duration-200', isRemoving ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]')}
-            // eslint-disable-next-line react-hooks/refs
             style={{
-                /* eslint-disable-next-line react-hooks/refs */
-                ...(dnd.draggableProps?.style ?? {}),
-                /* eslint-disable-next-line react-hooks/refs */
-                ...(dnd.isDragging ? { zIndex: 50, boxShadow: '0 8px 32px rgba(0,0,0,0.15)' } : null),
+                ...(dnd?.draggableProps?.style ?? {}),
+                ...(dnd ? null : memberItemContainStyle),
+                ...(dnd?.isDragging ? { zIndex: 50, boxShadow: '0 8px 32px rgba(0,0,0,0.15)' } : null),
             }}
         >
             <div className={cn(
@@ -98,12 +106,13 @@ function MemberItem({
                 <div
                     className={cn(
                         'p-0.5 rounded touch-none transition-colors',
-                        isDisabled
-                            ? 'cursor-grab active:cursor-grabbing hover:bg-muted/60'
-                            : 'cursor-grab active:cursor-grabbing hover:bg-muted'
+                        dnd
+                            ? (isDisabled
+                                ? 'cursor-grab active:cursor-grabbing hover:bg-muted/60'
+                                : 'cursor-grab active:cursor-grabbing hover:bg-muted')
+                            : 'cursor-default text-muted-foreground/50'
                     )}
-                    // eslint-disable-next-line react-hooks/refs
-                    {...dnd.dragHandleProps}
+                    {...(dnd?.dragHandleProps ?? {})}
                 >
                     <GripVertical className="size-3.5 text-muted-foreground" />
                 </div>
@@ -201,7 +210,7 @@ function MemberItem({
             </div>
         </div>
     );
-}
+});
 
 export interface MemberListProps {
     members: SelectedMember[];
@@ -233,6 +242,11 @@ export interface MemberListProps {
      */
     showConfirmDelete?: boolean;
     layoutScope?: string;
+    /**
+     * 卡片展开预览专用：大列表启用虚拟滚动，避免一次性挂载所有 DnD 节点。
+     * 编辑弹窗默认关闭，保留完整拖拽排序能力。
+     */
+    virtualizeLargeList?: boolean;
 }
 
 export function MemberList({
@@ -248,6 +262,7 @@ export function MemberList({
     showWeight = false,
     showConfirmDelete = true,
     layoutScope: externalLayoutScope,
+    virtualizeLargeList = false,
 }: MemberListProps) {
     const internalLayoutScope = useId();
     const layoutScope = externalLayoutScope ?? internalLayoutScope;
@@ -258,7 +273,17 @@ export function MemberList({
 
     const visibleCount = members.filter((m) => !removingIds.has(m.id)).length;
     const isEmpty = visibleCount === 0;
+    const useVirtualMembers = virtualizeLargeList && members.length > VIRTUAL_MEMBER_THRESHOLD;
     const t = useTranslations('group');
+
+    // 大分组不再完整挂载 DnD 列表，避免展开后一次性创建大量拖拽节点导致滚动卡顿。
+    const virtualizer = useVirtualizer({
+        count: members.length,
+        getScrollElement: () => scrollContainerRef.current,
+        getItemKey: (index) => members[index]?.id ?? `member-${index}`,
+        estimateSize: () => MEMBER_ROW_ESTIMATE_SIZE,
+        overscan: 8,
+    });
 
     useEffect(() => {
         // Skip the initial mount so we don't auto-scroll on first render / initial data load.
@@ -337,51 +362,94 @@ export function MemberList({
                 )}
                 ref={scrollContainerRef}
             >
-                <DragDropContext
-                    onDragStart={() => onDragStart?.()}
-                    onDragEnd={handleDragEnd}
-                >
-                    <Droppable droppableId={`members-${layoutScope}`}>
-                        {(droppableProvided) => (
-                            <div
-                                ref={droppableProvided.innerRef}
-                                {...droppableProvided.droppableProps}
-                                className="p-2 flex flex-col space-y-1.5"
-                            >
-                                {members.map((member, index) => (
-                                    <Draggable
-                                        key={member.id}
-                                        draggableId={member.id}
-                                        index={index}
-                                        isDragDisabled={removingIds.has(member.id)}
-                                    >
-                                        {(draggableProvided, snapshot) => (
-                                            <MemberItem
-                                                member={member}
-                                                onRemove={onRemove}
-                                                onWeightChange={onWeightChange}
-                                                isRemoving={removingIds.has(member.id)}
-                                                index={index}
-                                                showWeight={showWeight}
-                                                showConfirmDelete={showConfirmDelete}
-                                                layoutScope={layoutScope}
-                                                dnd={{
-                                                    innerRef: draggableProvided.innerRef,
-                                                    draggableProps: draggableProvided.draggableProps,
-                                                    dragHandleProps: draggableProvided.dragHandleProps,
-                                                    isDragging: snapshot.isDragging,
-                                                }}
-                                                onMoveToTop={handleMoveToTop}
-                                                onMoveToBottom={handleMoveToBottom}
-                                            />
-                                        )}
-                                    </Draggable>
-                                ))}
-                                {droppableProvided.placeholder}
-                            </div>
-                        )}
-                    </Droppable>
-                </DragDropContext>
+                {useVirtualMembers ? (
+                    <div className="relative p-2" style={{ height: `${virtualizer.getTotalSize()}px` }}>
+                        {virtualizer.getVirtualItems().map((virtualRow) => {
+                            const member = members[virtualRow.index];
+                            if (!member) return null;
+
+                            return (
+                                <div
+                                    key={virtualRow.key}
+                                    data-index={virtualRow.index}
+                                    ref={virtualizer.measureElement}
+                                    className="absolute left-0 top-0 w-full px-2"
+                                    style={{ transform: `translateY(${virtualRow.start}px)` }}
+                                >
+                                    <MemberItem
+                                        member={member}
+                                        onRemove={onRemove}
+                                        onWeightChange={onWeightChange}
+                                        isRemoving={removingIds.has(member.id)}
+                                        index={virtualRow.index}
+                                        showWeight={showWeight}
+                                        showConfirmDelete={showConfirmDelete}
+                                        layoutScope={layoutScope}
+                                        onMoveToTop={handleMoveToTop}
+                                        onMoveToBottom={handleMoveToBottom}
+                                    />
+                                </div>
+                            );
+                        })}
+                    </div>
+                ) : (
+                    <DragDropContext
+                        onDragStart={() => {
+                            onDragStart?.();
+                        }}
+                        onDragEnd={handleDragEnd}
+                    >
+                        <Droppable droppableId={`members-${layoutScope}`}>
+                            {(droppableProvided) => (
+                                <div
+                                    ref={droppableProvided.innerRef}
+                                    {...droppableProvided.droppableProps}
+                                    className="p-2 flex flex-col space-y-1.5"
+                                >
+                                    {members.map((member, index) => (
+                                        <Draggable
+                                            key={member.id}
+                                            draggableId={member.id}
+                                            index={index}
+                                            isDragDisabled={removingIds.has(member.id)}
+                                        >
+                                            {(draggableProvided, snapshot) => {
+                                                const item = (
+                                                    <MemberItem
+                                                        member={member}
+                                                        onRemove={onRemove}
+                                                        onWeightChange={onWeightChange}
+                                                        isRemoving={removingIds.has(member.id)}
+                                                        index={index}
+                                                        showWeight={showWeight}
+                                                        showConfirmDelete={showConfirmDelete}
+                                                        layoutScope={layoutScope}
+                                                        dnd={{
+                                                            innerRef: draggableProvided.innerRef,
+                                                            draggableProps: draggableProvided.draggableProps,
+                                                            dragHandleProps: draggableProvided.dragHandleProps,
+                                                            isDragging: snapshot.isDragging,
+                                                        }}
+                                                        onMoveToTop={handleMoveToTop}
+                                                        onMoveToBottom={handleMoveToBottom}
+                                                    />
+                                                );
+
+                                                // 拖拽库使用 fixed 坐标；放到 body 下可避开上层 motion transform / 弹窗坐标系导致的拖拽偏移。
+                                                if (snapshot.isDragging && dragPortalRoot) {
+                                                    return createPortal(item, dragPortalRoot);
+                                                }
+
+                                                return item;
+                                            }}
+                                        </Draggable>
+                                    ))}
+                                    {droppableProvided.placeholder}
+                                </div>
+                            )}
+                        </Droppable>
+                    </DragDropContext>
+                )}
             </div>
         </div>
     );

@@ -466,6 +466,7 @@ export function GroupCard({ group }: { group: Group }) {
                                 autoScrollOnAdd={false}
                                 showWeight={group.mode === GroupMode.Weighted}
                                 layoutScope={`card-${group.id ?? 'unknown'}`}
+                                virtualizeLargeList
                             />
                         ) : (
                             <div className="flex h-full flex-col gap-3 p-3 text-muted-foreground">
