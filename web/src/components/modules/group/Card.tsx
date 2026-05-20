@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef, type KeyboardEvent } from 'react';
 import { ChevronDown, Trash2, X, Pencil } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { type Group, useDeleteGroup, useUpdateGroup } from '@/api/endpoints/group';
@@ -75,19 +75,31 @@ function EditDialogContent({ group, displayMembers, isSubmitting, onSubmit }: Ed
 }
 
 function EditDialogTriggerButton({ label }: { label: string }) {
-    const { setIsOpen } = useMorphingDialog();
+    const { setIsOpen, isOpen, uniqueId, triggerRef } = useMorphingDialog();
+
+    const handleKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        setIsOpen((open) => !open);
+    }, [setIsOpen]);
 
     return (
         <Tooltip side="top" sideOffset={10} align="center">
             <TooltipTrigger asChild>
-                <button
-                    type="button"
-                    onClick={() => setIsOpen(true)}
+                <div
+                    ref={triggerRef}
+                    role="button"
+                    tabIndex={0}
+                    aria-haspopup="dialog"
+                    aria-expanded={isOpen}
+                    aria-controls={`motion-ui-morphing-dialog-content-${uniqueId}`}
                     aria-label={label}
-                    className="p-1.5 rounded-lg transition-colors hover:bg-muted text-muted-foreground hover:text-foreground"
+                    onClick={() => setIsOpen((open) => !open)}
+                    onKeyDown={handleKeyDown}
+                    className="p-1.5 rounded-lg transition-colors hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
                 >
                     <Pencil className="size-4" />
-                </button>
+                </div>
             </TooltipTrigger>
             <TooltipContent>{label}</TooltipContent>
         </Tooltip>

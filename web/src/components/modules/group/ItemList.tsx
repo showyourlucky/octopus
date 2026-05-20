@@ -1,7 +1,7 @@
 'use client';
 
 import { memo, useEffect, useId, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { Layers, GripVertical, X, Trash2, ArrowUpToLine, ArrowDownToLine } from 'lucide-react';
 import {
@@ -60,6 +60,8 @@ const MemberItem = memo(function MemberItem({
     showConfirmDelete = true,
     layoutScope,
     dnd,
+    isConfirmingDelete = false,
+    onConfirmDeleteChange,
     onMoveToTop,
     onMoveToBottom,
 }: {
@@ -72,12 +74,13 @@ const MemberItem = memo(function MemberItem({
     showConfirmDelete?: boolean;
     layoutScope?: string;
     dnd?: MemberItemDnd;
+    isConfirmingDelete?: boolean;
+    onConfirmDeleteChange?: (id: string | null) => void;
     onMoveToTop?: (index: number) => void;
     onMoveToBottom?: (index: number) => void;
 }) {
     const t = useTranslations('group');
     const { Avatar: ModelAvatar } = getModelIcon(member.name);
-    const [confirmDelete, setConfirmDelete] = useState(false);
     const isDisabled = member.enabled === false;
 
     return (
@@ -168,11 +171,11 @@ const MemberItem = memo(function MemberItem({
                     </button>
                 )}
 
-                {(!showConfirmDelete || !confirmDelete) && (
+                {(!showConfirmDelete || !isConfirmingDelete) && (
                     <motion.button
                         layoutId={`delete-btn-member-${layoutScope ?? 'default'}-${member.id}`}
                         type="button"
-                        onClick={() => showConfirmDelete ? setConfirmDelete(true) : onRemove(member.id)}
+                        onClick={() => showConfirmDelete ? onConfirmDeleteChange?.(member.id) : onRemove(member.id)}
                         className="p-1 rounded hover:bg-destructive/10 hover:text-destructive transition-colors"
                         initial={false}
                         animate={{ opacity: 1, x: 0 }}
@@ -184,7 +187,7 @@ const MemberItem = memo(function MemberItem({
                 )}
 
                 <AnimatePresence>
-                    {showConfirmDelete && confirmDelete && (
+                    {showConfirmDelete && isConfirmingDelete && (
                         <motion.div
                             layoutId={`delete-btn-member-${layoutScope ?? 'default'}-${member.id}`}
                             className="absolute inset-0 flex items-center justify-center gap-2 bg-destructive p-1.5 rounded-lg"
@@ -192,14 +195,17 @@ const MemberItem = memo(function MemberItem({
                         >
                             <button
                                 type="button"
-                                onClick={() => setConfirmDelete(false)}
+                                onClick={() => onConfirmDeleteChange?.(null)}
                                 className="flex h-6 w-6 items-center justify-center rounded-md bg-destructive-foreground/20 text-destructive-foreground transition-all hover:bg-destructive-foreground/30 active:scale-95"
                             >
                                 <X className="h-3 w-3" />
                             </button>
                             <button
                                 type="button"
-                                onClick={() => onRemove(member.id)}
+                                onClick={() => {
+                                    onConfirmDeleteChange?.(null);
+                                    onRemove(member.id);
+                                }}
                                 className="flex-1 h-6 flex items-center justify-center gap-1.5 rounded-md bg-destructive-foreground text-destructive text-xs font-semibold transition-all hover:bg-destructive-foreground/90 active:scale-[0.98]"
                             >
                                 <Trash2 className="h-3 w-3" />
@@ -249,6 +255,82 @@ export interface MemberListProps {
     virtualizeLargeList?: boolean;
 }
 
+interface VirtualMemberListProps {
+    members: SelectedMember[];
+    removingIds: Set<string>;
+    scrollContainerRef: RefObject<HTMLDivElement | null>;
+    layoutScope: string;
+    showWeight: boolean;
+    showConfirmDelete: boolean;
+    confirmDeleteId: string | null;
+    onConfirmDeleteChange: (id: string | null) => void;
+    onRemove: (id: string) => void;
+    onWeightChange?: (id: string, weight: number) => void;
+    onMoveToTop: (index: number) => void;
+    onMoveToBottom: (index: number) => void;
+}
+
+function VirtualMemberList({
+    members,
+    removingIds,
+    scrollContainerRef,
+    layoutScope,
+    showWeight,
+    showConfirmDelete,
+    confirmDeleteId,
+    onConfirmDeleteChange,
+    onRemove,
+    onWeightChange,
+    onMoveToTop,
+    onMoveToBottom,
+}: VirtualMemberListProps) {
+    'use no memo';
+
+    // 只有大列表性能模式会挂载虚拟滚动，避免小列表也初始化虚拟器造成额外开销。
+    // eslint-disable-next-line react-hooks/incompatible-library
+    const virtualizer = useVirtualizer({
+        count: members.length,
+        getScrollElement: () => scrollContainerRef.current,
+        getItemKey: (index) => members[index]?.id ?? `member-${index}`,
+        estimateSize: () => MEMBER_ROW_ESTIMATE_SIZE,
+        overscan: 8,
+    });
+
+    return (
+        <div className="relative p-2" style={{ height: `${virtualizer.getTotalSize()}px` }}>
+            {virtualizer.getVirtualItems().map((virtualRow) => {
+                const member = members[virtualRow.index];
+                if (!member) return null;
+
+                return (
+                    <div
+                        key={virtualRow.key}
+                        data-index={virtualRow.index}
+                        ref={virtualizer.measureElement}
+                        className="absolute left-0 top-0 w-full px-2"
+                        style={{ transform: `translateY(${virtualRow.start}px)` }}
+                    >
+                        <MemberItem
+                            member={member}
+                            onRemove={onRemove}
+                            onWeightChange={onWeightChange}
+                            isRemoving={removingIds.has(member.id)}
+                            index={virtualRow.index}
+                            showWeight={showWeight}
+                            showConfirmDelete={showConfirmDelete}
+                            layoutScope={layoutScope}
+                            isConfirmingDelete={confirmDeleteId === member.id}
+                            onConfirmDeleteChange={onConfirmDeleteChange}
+                            onMoveToTop={onMoveToTop}
+                            onMoveToBottom={onMoveToBottom}
+                        />
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
 export function MemberList({
     members,
     onReorder,
@@ -270,20 +352,12 @@ export function MemberList({
     const scrollContainerRef = useRef<HTMLDivElement | null>(null);
     const prevMemberCountRef = useRef<number>(0);
     const hasMountedRef = useRef(false);
+    const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
     const visibleCount = members.filter((m) => !removingIds.has(m.id)).length;
     const isEmpty = visibleCount === 0;
     const useVirtualMembers = virtualizeLargeList && members.length > VIRTUAL_MEMBER_THRESHOLD;
     const t = useTranslations('group');
-
-    // 大分组不再完整挂载 DnD 列表，避免展开后一次性创建大量拖拽节点导致滚动卡顿。
-    const virtualizer = useVirtualizer({
-        count: members.length,
-        getScrollElement: () => scrollContainerRef.current,
-        getItemKey: (index) => members[index]?.id ?? `member-${index}`,
-        estimateSize: () => MEMBER_ROW_ESTIMATE_SIZE,
-        overscan: 8,
-    });
 
     useEffect(() => {
         // Skip the initial mount so we don't auto-scroll on first render / initial data load.
@@ -343,7 +417,7 @@ export function MemberList({
     };
 
     return (
-        <div className="relative h-full min-h-0">
+        <div className="relative flex h-full min-h-0 flex-col">
             <div
                 className={cn(
                     'absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground',
@@ -355,43 +429,34 @@ export function MemberList({
                 <span className="text-sm">{t('card.empty')}</span>
             </div>
 
+            {useVirtualMembers && !isEmpty && (
+                <div className="shrink-0 border-b border-border/40 bg-muted/40 px-3 py-2 text-[11px] leading-4 text-muted-foreground">
+                    {t('card.performanceMode')}
+                </div>
+            )}
+
             <div
                 className={cn(
-                    'h-full overflow-y-auto transition-opacity duration-200',
+                    'min-h-0 flex-1 overflow-y-auto transition-opacity duration-200',
                     isEmpty ? 'opacity-0' : 'opacity-100'
                 )}
                 ref={scrollContainerRef}
             >
                 {useVirtualMembers ? (
-                    <div className="relative p-2" style={{ height: `${virtualizer.getTotalSize()}px` }}>
-                        {virtualizer.getVirtualItems().map((virtualRow) => {
-                            const member = members[virtualRow.index];
-                            if (!member) return null;
-
-                            return (
-                                <div
-                                    key={virtualRow.key}
-                                    data-index={virtualRow.index}
-                                    ref={virtualizer.measureElement}
-                                    className="absolute left-0 top-0 w-full px-2"
-                                    style={{ transform: `translateY(${virtualRow.start}px)` }}
-                                >
-                                    <MemberItem
-                                        member={member}
-                                        onRemove={onRemove}
-                                        onWeightChange={onWeightChange}
-                                        isRemoving={removingIds.has(member.id)}
-                                        index={virtualRow.index}
-                                        showWeight={showWeight}
-                                        showConfirmDelete={showConfirmDelete}
-                                        layoutScope={layoutScope}
-                                        onMoveToTop={handleMoveToTop}
-                                        onMoveToBottom={handleMoveToBottom}
-                                    />
-                                </div>
-                            );
-                        })}
-                    </div>
+                    <VirtualMemberList
+                        members={members}
+                        removingIds={removingIds}
+                        scrollContainerRef={scrollContainerRef}
+                        layoutScope={layoutScope}
+                        showWeight={showWeight}
+                        showConfirmDelete={showConfirmDelete}
+                        confirmDeleteId={confirmDeleteId}
+                        onConfirmDeleteChange={setConfirmDeleteId}
+                        onRemove={onRemove}
+                        onWeightChange={onWeightChange}
+                        onMoveToTop={handleMoveToTop}
+                        onMoveToBottom={handleMoveToBottom}
+                    />
                 ) : (
                     <DragDropContext
                         onDragStart={() => {
@@ -424,6 +489,8 @@ export function MemberList({
                                                         showWeight={showWeight}
                                                         showConfirmDelete={showConfirmDelete}
                                                         layoutScope={layoutScope}
+                                                        isConfirmingDelete={confirmDeleteId === member.id}
+                                                        onConfirmDeleteChange={setConfirmDeleteId}
                                                         dnd={{
                                                             innerRef: draggableProvided.innerRef,
                                                             draggableProps: draggableProvided.draggableProps,

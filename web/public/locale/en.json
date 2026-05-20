@@ -363,7 +363,8 @@
         "card": {
             "empty": "No rules",
             "models": "Models ({count})",
-            "loadingModels": "Expanding models..."
+            "loadingModels": "Expanding models...",
+            "performanceMode": "Performance mode: drag sorting is disabled here. Open Edit for full drag sorting."
         },
         "detail": {
             "actions": {

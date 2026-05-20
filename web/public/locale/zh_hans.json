@@ -363,7 +363,8 @@
         "card": {
             "empty": "暂无规则",
             "models": "模型（{count}）",
-            "loadingModels": "正在展开模型..."
+            "loadingModels": "正在展开模型...",
+            "performanceMode": "性能模式：此处已关闭拖拽排序，请进入编辑弹窗进行完整拖拽排序。"
         },
         "detail": {
             "actions": {
