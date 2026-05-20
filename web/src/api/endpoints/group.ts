@@ -146,6 +146,13 @@ export function useUpdateGroup() {
         },
         onSuccess: (data) => {
             logger.log('分组更新成功:', data);
+            // 先用后端返回的新分组同步更新列表缓存，避免编辑弹窗关闭后页面短时间继续显示旧数据。
+            if (typeof data.id === 'number') {
+                queryClient.setQueryData<Group[]>(['groups', 'list'], (oldGroups) => {
+                    if (!oldGroups) return oldGroups;
+                    return oldGroups.map((group) => group.id === data.id ? data : group);
+                });
+            }
             queryClient.invalidateQueries({ queryKey: ['groups', 'list'] });
         },
         onError: (error) => {
