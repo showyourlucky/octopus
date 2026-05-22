@@ -240,7 +240,7 @@ func (ra *relayAttempt) attempt() attemptResult {
 	return attemptResult{
 		Success: false,
 		Written: written,
-		Err:     fmt.Errorf("channel %s failed: %v", ra.channel.Name, fwdErr),
+		Err:     fmt.Errorf("channel %s(key_id=%d) failed: %v", ra.channel.Name, ra.usedKey.ID, fwdErr),
 	}
 }
 

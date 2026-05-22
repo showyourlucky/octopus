@@ -165,8 +165,8 @@ func ImagesHandler(endpoint string, c *gin.Context) {
 			continue
 		}
 
-		log.Infof("images request model %s, mode: %d, forwarding to channel: %s model: %s (attempt %d/%d, sticky=%t, stream=%t)",
-			requestModel, group.Mode, channel.Name, item.ModelName,
+		log.Infof("images request model %s, mode: %d, forwarding to channel: %s model: %s key_id: %d (attempt %d/%d, sticky=%t, stream=%t)",
+			requestModel, group.Mode, channel.Name, item.ModelName, usedKey.ID,
 			iter.Index()+1, iter.Len(), iter.IsSticky(), stream)
 
 		span := iter.StartAttempt(channel.ID, usedKey.ID, channel.Name)
@@ -224,7 +224,7 @@ func ImagesHandler(endpoint string, c *gin.Context) {
 			return
 		}
 
-		lastErr = fmt.Errorf("channel %s failed: %v", channel.Name, fwdErr)
+		lastErr = fmt.Errorf("channel %s(key_id=%d) failed: %v", channel.Name, usedKey.ID, fwdErr)
 	}
 
 	// 所有通道都失败
