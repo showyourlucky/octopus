@@ -16,7 +16,9 @@ import (
 type ChatOutbound struct{}
 
 func (o *ChatOutbound) TransformRequest(ctx context.Context, request *model.InternalLLMRequest, baseUrl, key string) (*http.Request, error) {
+	reasoningContents := collectMimoReasoningContents(request, baseUrl)
 	request.ClearHelpFields()
+	restoreMimoReasoningContents(request, reasoningContents)
 
 	// Convert developer role to system role for compatibility
 	for i := range request.Messages {
@@ -55,6 +57,53 @@ func (o *ChatOutbound) TransformRequest(ctx context.Context, request *model.Inte
 	req.URL = parsedUrl
 	req.Method = http.MethodPost
 	return req, nil
+}
+
+type mimoReasoningContent struct {
+	index int
+	value string
+}
+
+func collectMimoReasoningContents(request *model.InternalLLMRequest, baseUrl string) []mimoReasoningContent {
+	if request == nil || !shouldPassMimoReasoningContent(baseUrl, request.Model) {
+		return nil
+	}
+
+	reasoningContents := make([]mimoReasoningContent, 0)
+	for i, msg := range request.Messages {
+		if msg.Role != "assistant" || len(msg.ToolCalls) == 0 {
+			continue
+		}
+
+		// 小米 MiMo 思考模式要求带工具调用的历史 assistant 消息完整回传 reasoning_content。
+		if msg.ReasoningContent != nil {
+			reasoningContents = append(reasoningContents, mimoReasoningContent{index: i, value: *msg.ReasoningContent})
+			continue
+		}
+		if msg.Reasoning != nil {
+			reasoningContents = append(reasoningContents, mimoReasoningContent{index: i, value: *msg.Reasoning})
+		}
+	}
+	return reasoningContents
+}
+
+func restoreMimoReasoningContents(request *model.InternalLLMRequest, reasoningContents []mimoReasoningContent) {
+	if request == nil || len(reasoningContents) == 0 {
+		return
+	}
+
+	for _, item := range reasoningContents {
+		if item.index < 0 || item.index >= len(request.Messages) {
+			continue
+		}
+		request.Messages[item.index].ReasoningContent = &item.value
+	}
+}
+
+func shouldPassMimoReasoningContent(baseUrl, modelName string) bool {
+	lowerBaseUrl := strings.ToLower(baseUrl)
+	lowerModelName := strings.ToLower(modelName)
+	return strings.Contains(lowerBaseUrl, "xiaomimimo.com") || strings.HasPrefix(lowerModelName, "mimo-")
 }
 
 func (o *ChatOutbound) TransformResponse(ctx context.Context, response *http.Response) (*model.InternalLLMResponse, error) {
