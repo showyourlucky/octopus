@@ -15,6 +15,7 @@ export type AttemptStatus = 'success' | 'failed' | 'circuit_break' | 'skipped';
 export interface ChannelAttempt {
     channel_id: number;
     channel_key_id?: number;
+    channel_key_remark?: string; // 渠道 Key 备注，方便识别具体哪个 Key
     channel_name: string;
     model_name: string;
     attempt_num: number;

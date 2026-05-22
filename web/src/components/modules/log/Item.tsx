@@ -79,6 +79,9 @@ function RetryBadgeWithTooltip({ channelName, brandColor, attempts }: RetryBadge
                             <div className="flex min-w-0 flex-col flex-1">
                                 <span className="truncate text-xs font-semibold text-foreground">
                                     {attempt.channel_name}
+                                    {attempt.channel_key_remark && (
+                                        <span className="text-muted-foreground/70 ml-1">[{attempt.channel_key_remark}]</span>
+                                    )}
                                 </span>
                                 <span className="text-[10px] text-muted-foreground">
                                     {attempt.model_name} • {formatDuration(attempt.duration)}
@@ -399,6 +402,11 @@ export function LogCard({ log }: { log: RelayLog }) {
                                                                             <span className="font-semibold text-foreground">
                                                                                 {attempt.channel_name}
                                                                             </span>
+                                                                            {attempt.channel_key_remark && (
+                                                                                <span className="text-muted-foreground/70" title={`key_id: ${attempt.channel_key_id}`}>
+                                                                                    [{attempt.channel_key_remark}]
+                                                                                </span>
+                                                                            )}
                                                                             <span className="text-muted-foreground">
                                                                                 ({attempt.model_name})
                                                                             </span>

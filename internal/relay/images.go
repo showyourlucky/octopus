@@ -139,29 +139,29 @@ func ImagesHandler(endpoint string, c *gin.Context) {
 		channel, err := op.ChannelGet(item.ChannelID, ctx)
 		if err != nil {
 			log.Warnf("failed to get channel %d: %v", item.ChannelID, err)
-			iter.Skip(item.ChannelID, 0, fmt.Sprintf("channel_%d", item.ChannelID), fmt.Sprintf("channel not found: %v", err))
+			iter.Skip(item.ChannelID, 0, fmt.Sprintf("channel_%d", item.ChannelID), "", fmt.Sprintf("channel not found: %v", err))
 			lastErr = err
 			continue
 		}
 		if !channel.Enabled {
-			iter.Skip(channel.ID, 0, channel.Name, "channel disabled")
+			iter.Skip(channel.ID, 0, channel.Name, "", "channel disabled")
 			continue
 		}
 
 		// channel.Type 限制：仅 OpenAI Chat/Responses
 		if channel.Type != outbound.OutboundTypeOpenAIChat && channel.Type != outbound.OutboundTypeOpenAIResponse {
-			iter.Skip(channel.ID, 0, channel.Name, fmt.Sprintf("unsupported channel type: %d", channel.Type))
+			iter.Skip(channel.ID, 0, channel.Name, "", fmt.Sprintf("unsupported channel type: %d", channel.Type))
 			continue
 		}
 
 		usedKey := channel.GetChannelKey()
 		if usedKey.ChannelKey == "" {
-			iter.Skip(channel.ID, 0, channel.Name, "no available key")
+			iter.Skip(channel.ID, 0, channel.Name, "", "no available key")
 			continue
 		}
 
 		// 熔断检查（熔断 key 使用 actualModel=item.ModelName）
-		if iter.SkipCircuitBreak(channel.ID, usedKey.ID, channel.Name) {
+		if iter.SkipCircuitBreak(channel.ID, usedKey.ID, channel.Name, usedKey.Remark) {
 			continue
 		}
 
@@ -169,7 +169,7 @@ func ImagesHandler(endpoint string, c *gin.Context) {
 			requestModel, group.Mode, channel.Name, item.ModelName, usedKey.ID,
 			iter.Index()+1, iter.Len(), iter.IsSticky(), stream)
 
-		span := iter.StartAttempt(channel.ID, usedKey.ID, channel.Name)
+		span := iter.StartAttempt(channel.ID, usedKey.ID, channel.Name, usedKey.Remark)
 
 		// 尝试一次转发
 		statusCode, written, usage, upstreamCT, fwdErr := imagesAttempt(ctx, endpoint, c, bc, isMultipart, boundary, jsonPayload, stream, channel, usedKey.ChannelKey, group.FirstTokenTimeOut, metrics, item.ModelName)

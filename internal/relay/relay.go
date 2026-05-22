@@ -89,35 +89,35 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 		channel, err := op.ChannelGet(item.ChannelID, c.Request.Context())
 		if err != nil {
 			log.Warnf("failed to get channel %d: %v", item.ChannelID, err)
-			iter.Skip(item.ChannelID, 0, fmt.Sprintf("channel_%d", item.ChannelID), fmt.Sprintf("channel not found: %v", err))
+			iter.Skip(item.ChannelID, 0, fmt.Sprintf("channel_%d", item.ChannelID), "", fmt.Sprintf("channel not found: %v", err))
 			lastErr = err
 			continue
 		}
 		if !channel.Enabled {
-			iter.Skip(channel.ID, 0, channel.Name, "channel disabled")
+			iter.Skip(channel.ID, 0, channel.Name, "", "channel disabled")
 			continue
 		}
 
 		// 出站适配器
 		outAdapter := outbound.Get(channel.Type)
 		if outAdapter == nil {
-			iter.Skip(channel.ID, 0, channel.Name, fmt.Sprintf("unsupported channel type: %d", channel.Type))
+			iter.Skip(channel.ID, 0, channel.Name, "", fmt.Sprintf("unsupported channel type: %d", channel.Type))
 			continue
 		}
 
 		// 类型兼容性检查
 		if internalRequest.IsEmbeddingRequest() && !outbound.IsEmbeddingChannelType(channel.Type) {
-			iter.Skip(channel.ID, 0, channel.Name, "channel type not compatible with embedding request")
+			iter.Skip(channel.ID, 0, channel.Name, "", "channel type not compatible with embedding request")
 			continue
 		}
 		if internalRequest.IsChatRequest() && !outbound.IsChatChannelType(channel.Type) {
-			iter.Skip(channel.ID, 0, channel.Name, "channel type not compatible with chat request")
+			iter.Skip(channel.ID, 0, channel.Name, "", "channel type not compatible with chat request")
 			continue
 		}
 
 		candidateKeys := channel.GetCandidateKeys()
 		if len(candidateKeys) == 0 {
-			iter.Skip(channel.ID, 0, channel.Name, "no available key")
+			iter.Skip(channel.ID, 0, channel.Name, "", "no available key")
 			continue
 		}
 
@@ -136,7 +136,7 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 			usedKey := candidateKeys[i]
 
 			// 熔断检查
-			if iter.SkipCircuitBreak(channel.ID, usedKey.ID, channel.Name) {
+			if iter.SkipCircuitBreak(channel.ID, usedKey.ID, channel.Name, usedKey.Remark) {
 				continue
 			}
 
@@ -176,7 +176,7 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 
 // attempt 统一管理一次通道尝试的完整生命周期
 func (ra *relayAttempt) attempt() attemptResult {
-	span := ra.iter.StartAttempt(ra.channel.ID, ra.usedKey.ID, ra.channel.Name)
+	span := ra.iter.StartAttempt(ra.channel.ID, ra.usedKey.ID, ra.channel.Name, ra.usedKey.Remark)
 
 	// 转发请求
 	statusCode, fwdErr := ra.forward()
