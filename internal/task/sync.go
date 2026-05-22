@@ -15,6 +15,12 @@ import (
 
 var lastSyncModelsTime = time.Now()
 
+// shouldSyncChannelModels 判断渠道是否允许参与本轮自动同步。
+// 自动同步会请求上游并刷新本地模型数据，因此必须同时满足“开启自动同步”和“渠道已启动”。
+func shouldSyncChannelModels(channel model.Channel) bool {
+	return channel.AutoSync && channel.Enabled
+}
+
 // SyncModelsTask 同步模型任务
 func SyncModelsTask() {
 	log.Debugf("sync models task started")
@@ -33,6 +39,10 @@ func SyncModelsTask() {
 	seenTotalNewModels := make(map[string]struct{}, 128)
 	for _, channel := range channels {
 		if !channel.AutoSync {
+			continue
+		}
+		if !shouldSyncChannelModels(channel) {
+			log.Debugf("跳过未启动渠道的自动同步: %s", channel.Name)
 			continue
 		}
 		fetchModels, err := helper.FetchModels(ctx, channel)
