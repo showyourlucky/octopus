@@ -207,7 +207,7 @@ export function Log() {
     }, [hasMore, isLoading, isLoadingMore, loadMore, logs.length]);
 
     return (
-        <PageWrapper className="grid grid-cols-1 gap-4">
+        <PageWrapper className="grid h-full min-h-0 grid-cols-1 gap-4 overflow-y-auto overscroll-contain rounded-t-3xl pb-24 md:pb-4">
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2">
                 <SearchableFilterSelect
                     value={selectedGroup}
