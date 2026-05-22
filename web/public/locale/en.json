@@ -564,6 +564,8 @@
             "baseUrlDelay": "Delay(ms)",
             "advanced": "Advanced Settings",
             "apiKey": "API Key",
+            "keyId": "ID: {id}",
+            "keyPendingId": "ID after save",
             "customHeader": "Custom Headers",
             "customHeaderKey": "Header Key",
             "customHeaderValue": "Header Value",

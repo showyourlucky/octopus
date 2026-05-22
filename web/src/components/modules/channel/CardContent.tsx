@@ -410,6 +410,14 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
                                                         : key.channel_key}
                                                 </span>
 
+                                                <Badge
+                                                    variant="outline"
+                                                    title={`ID: ${key.id}`}
+                                                    className="h-5 shrink-0 px-1.5 font-mono text-[10px] text-muted-foreground"
+                                                >
+                                                    ID: {key.id}
+                                                </Badge>
+
                                                 {key.remark && (
                                                     <span className="text-xs text-muted-foreground truncate max-w-24" title={key.remark}>
                                                         {key.remark}

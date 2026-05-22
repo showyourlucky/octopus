@@ -664,40 +664,52 @@ export function ChannelForm({
                 <div className="space-y-2">
                     {paginatedKeys.map((k, idx) => {
                         const globalIdx = (currentKeyPage - 1) * keyPageSize + idx;
+                        const keyIDLabel = typeof k.id === 'number'
+                            ? t('keyId', { id: k.id })
+                            : t('keyPendingId');
+
                         return (
-                        <div key={k.id ?? `new-${globalIdx}`} className="flex items-center gap-2">
-                            <Input
-                                type="text"
-                                value={k.channel_key}
-                                onChange={(e) => handleUpdateKey(globalIdx, { channel_key: e.target.value })}
-                                placeholder={t('apiKey')}
-                                required={globalIdx === 0}
-                                className="rounded-xl flex-1"
-                            />
-                            <Input
-                                type="text"
-                                value={k.remark ?? ''}
-                                onChange={(e) => handleUpdateKey(globalIdx, { remark: e.target.value })}
-                                placeholder={t('remark')}
-                                className="rounded-xl w-32"
-                            />
-                            <Switch
-                                checked={k.enabled}
-                                onCheckedChange={(checked) => handleUpdateKey(globalIdx, { enabled: checked })}
-                            />
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleRemoveKey(globalIdx)}
-                                disabled={(formData.keys ?? []).length <= 1}
-                                className="h-8 w-8 p-0 rounded-xl text-muted-foreground hover:text-destructive hover:bg-transparent disabled:opacity-40"
-                                title="Remove"
-                            >
-                                <X className="h-4 w-4" />
-                            </Button>
-                        </div>
-                    )})}
+                            <div key={k.id ?? `new-${globalIdx}`} className="flex flex-wrap items-center gap-2">
+                                <Input
+                                    type="text"
+                                    value={k.channel_key}
+                                    onChange={(e) => handleUpdateKey(globalIdx, { channel_key: e.target.value })}
+                                    placeholder={t('apiKey')}
+                                    required={globalIdx === 0}
+                                    className="min-w-0 flex-[1_1_16rem] rounded-xl"
+                                />
+                                <Badge
+                                    variant="outline"
+                                    title={keyIDLabel}
+                                    className="h-9 shrink-0 rounded-xl px-2.5 font-mono text-[11px] text-muted-foreground"
+                                >
+                                    {keyIDLabel}
+                                </Badge>
+                                <Input
+                                    type="text"
+                                    value={k.remark ?? ''}
+                                    onChange={(e) => handleUpdateKey(globalIdx, { remark: e.target.value })}
+                                    placeholder={t('remark')}
+                                    className="min-w-0 flex-[1_1_8rem] rounded-xl md:max-w-40"
+                                />
+                                <Switch
+                                    checked={k.enabled}
+                                    onCheckedChange={(checked) => handleUpdateKey(globalIdx, { enabled: checked })}
+                                />
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleRemoveKey(globalIdx)}
+                                    disabled={(formData.keys ?? []).length <= 1}
+                                    className="h-8 w-8 p-0 rounded-xl text-muted-foreground hover:text-destructive hover:bg-transparent disabled:opacity-40"
+                                    title="Remove"
+                                >
+                                    <X className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 

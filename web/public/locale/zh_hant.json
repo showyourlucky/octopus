@@ -564,6 +564,8 @@
             "baseUrlDelay": "延遲(ms)",
             "advanced": "進階設定",
             "apiKey": "API Key",
+            "keyId": "ID: {id}",
+            "keyPendingId": "儲存後產生 ID",
             "customHeader": "自定義 Header",
             "customHeaderKey": "Header Key",
             "customHeaderValue": "Header Value",
