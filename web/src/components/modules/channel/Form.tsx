@@ -669,7 +669,7 @@ export function ChannelForm({
                             : t('keyPendingId');
 
                         return (
-                            <div key={k.id ?? `new-${globalIdx}`} className="flex flex-wrap items-center gap-2">
+                            <div key={k.id ?? `new-${globalIdx}`} className="flex flex-wrap items-center gap-2 md:flex-nowrap">
                                 <Input
                                     type="text"
                                     value={k.channel_key}
@@ -690,7 +690,7 @@ export function ChannelForm({
                                     value={k.remark ?? ''}
                                     onChange={(e) => handleUpdateKey(globalIdx, { remark: e.target.value })}
                                     placeholder={t('remark')}
-                                    className="min-w-0 flex-[1_1_8rem] rounded-xl md:max-w-40"
+                                    className="min-w-0 flex-[1_1_8rem] rounded-xl md:max-w-36"
                                 />
                                 <Switch
                                     checked={k.enabled}
