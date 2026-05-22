@@ -41,6 +41,17 @@ function formatDuration(ms: number): string {
     return `${(ms / 1000).toFixed(2)}s`;
 }
 
+// 统一生成渠道 Key 诊断标签，保证没有备注时也能通过 key_id 定位具体 Key。
+function getAttemptKeyLabel(attempt: ChannelAttempt): string {
+    const remark = attempt.channel_key_remark?.trim() ?? '';
+    const keyID = typeof attempt.channel_key_id === 'number' && attempt.channel_key_id > 0
+        ? `key_id=${attempt.channel_key_id}`
+        : '';
+
+    if (remark && keyID) return `${remark} / ${keyID}`;
+    return remark || keyID;
+}
+
 interface RetryBadgeWithTooltipProps {
     channelName: string;
     brandColor: string;
@@ -63,40 +74,44 @@ function RetryBadgeWithTooltip({ channelName, brandColor, attempts }: RetryBadge
                 </Badge>
             </TooltipTrigger>
             <TooltipContent className="border bg-card p-2 min-w-[280px] shadow-sm rounded-3xl flex flex-col gap-1">
-                {attempts.map((attempt, idx) => (
-                    <div key={idx} className="flex flex-col w-full">
-                        <div className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50 transition-colors">
-                            <Badge
-                                className={cn(
-                                    "h-5 shrink-0 px-1.5 text-[10px] font-bold uppercase shadow-none border-0",
-                                    attempt.status === 'success'
-                                        ? "bg-primary/15 text-primary"
-                                        : "bg-destructive/15 text-destructive"
-                                )}
-                            >
-                                {attempt.status === 'success' ? t('success') : t('failed')}
-                            </Badge>
-                            <div className="flex min-w-0 flex-col flex-1">
-                                <span className="truncate text-xs font-semibold text-foreground">
-                                    {attempt.channel_name}
-                                    {attempt.channel_key_remark && (
-                                        <span className="text-muted-foreground/70 ml-1">[{attempt.channel_key_remark}]</span>
+                {attempts.map((attempt, idx) => {
+                    const keyLabel = getAttemptKeyLabel(attempt);
+
+                    return (
+                        <div key={idx} className="flex flex-col w-full">
+                            <div className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50 transition-colors">
+                                <Badge
+                                    className={cn(
+                                        "h-5 shrink-0 px-1.5 text-[10px] font-bold uppercase shadow-none border-0",
+                                        attempt.status === 'success'
+                                            ? "bg-primary/15 text-primary"
+                                            : "bg-destructive/15 text-destructive"
                                     )}
-                                </span>
-                                <span className="text-[10px] text-muted-foreground">
-                                    {attempt.model_name} • {formatDuration(attempt.duration)}
-                                </span>
-                            </div>
-                        </div>
-                        {
-                            idx < attempts.length - 1 && (
-                                <div className="flex justify-center py-0.5">
-                                    <ArrowDown className="size-3 text-muted-foreground/30" />
+                                >
+                                    {attempt.status === 'success' ? t('success') : t('failed')}
+                                </Badge>
+                                <div className="flex min-w-0 flex-col flex-1">
+                                    <span className="truncate text-xs font-semibold text-foreground">
+                                        {attempt.channel_name}
+                                        {keyLabel && (
+                                            <span className="text-muted-foreground/70 ml-1">[{keyLabel}]</span>
+                                        )}
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground">
+                                        {attempt.model_name} • {formatDuration(attempt.duration)}
+                                    </span>
                                 </div>
-                            )
-                        }
-                    </div>
-                ))}
+                            </div>
+                            {
+                                idx < attempts.length - 1 && (
+                                    <div className="flex justify-center py-0.5">
+                                        <ArrowDown className="size-3 text-muted-foreground/30" />
+                                    </div>
+                                )
+                            }
+                        </div>
+                    );
+                })}
             </TooltipContent>
         </Tooltip >
     );
@@ -196,7 +211,10 @@ export function LogCard({ log }: { log: RelayLog }) {
     const requestAPIKeyName = useMemo(() => log.request_api_key_name?.trim() ?? '', [log.request_api_key_name]);
 
     const hasError = !!log.error;
-    const hasMultipleAttempts = log.attempts && log.attempts.length > 1;
+    const attempts = log.attempts ?? [];
+    const hasAttemptDetails = attempts.length > 0;
+    const hasMultipleAttempts = attempts.length > 1;
+    const singleAttemptKeyLabel = !hasMultipleAttempts && attempts[0] ? getAttemptKeyLabel(attempts[0]) : '';
     const [isDiagnosticExpanded, setIsDiagnosticExpanded] = useState(false);
 
     return (
@@ -229,6 +247,9 @@ export function LogCard({ log }: { log: RelayLog }) {
                                         style={{ backgroundColor: `${brandColor}15`, color: brandColor }}
                                     >
                                         {log.channel_name}
+                                        {singleAttemptKeyLabel && (
+                                            <span className="ml-1 text-[10px] opacity-75">[{singleAttemptKeyLabel}]</span>
+                                        )}
                                     </Badge>
                                 )}
                                 <span className="text-muted-foreground truncate" title={log.actual_model_name}>
@@ -303,6 +324,9 @@ export function LogCard({ log }: { log: RelayLog }) {
                                     style={{ backgroundColor: `${brandColor}15`, color: brandColor }}
                                 >
                                     {log.channel_name}
+                                    {singleAttemptKeyLabel && (
+                                        <span className="ml-1 text-[10px] opacity-75">[{singleAttemptKeyLabel}]</span>
+                                    )}
                                 </Badge>
                             )}
                             <span className="text-muted-foreground">{log.actual_model_name}</span>
@@ -339,7 +363,7 @@ export function LogCard({ log }: { log: RelayLog }) {
                                                 {hasError ? t('errorInfo') : t('retryDetails')}
                                             </span>
                                             <div className="ml-auto flex items-center gap-2">
-                                                {hasMultipleAttempts && (
+                                                {hasAttemptDetails && (
                                                     <Badge
                                                         variant="outline"
                                                         className={cn(
@@ -349,7 +373,7 @@ export function LogCard({ log }: { log: RelayLog }) {
                                                                 : "bg-secondary text-secondary-foreground"
                                                         )}
                                                     >
-                                                        {log.total_attempts || log.attempts!.length} {t('attempts')}
+                                                        {log.total_attempts || attempts.length} {t('attempts')}
                                                     </Badge>
                                                 )}
                                                 {isDiagnosticExpanded ? (
@@ -386,41 +410,45 @@ export function LogCard({ log }: { log: RelayLog }) {
                                                             </div>
                                                         )}
 
-                                                        {hasMultipleAttempts && (
+                                                        {hasAttemptDetails && (
                                                             <div className="flex flex-col gap-2">
-                                                                {log.attempts!.map((attempt, idx) => (
-                                                                    <div
-                                                                        key={idx}
-                                                                        className={cn(
-                                                                            "text-xs p-2.5 rounded-xl border transition-colors flex flex-col gap-2",
-                                                                            attempt.status === 'success'
-                                                                                ? "bg-primary/5 border-primary/20 hover:bg-primary/10"
-                                                                                : "bg-destructive/5 border-destructive/20 hover:bg-destructive/10"
-                                                                        )}
-                                                                    >
-                                                                        <div className="flex items-center gap-2">
-                                                                            <span className="font-semibold text-foreground">
-                                                                                {attempt.channel_name}
-                                                                            </span>
-                                                                            {attempt.channel_key_remark && (
-                                                                                <span className="text-muted-foreground/70" title={`key_id: ${attempt.channel_key_id}`}>
-                                                                                    [{attempt.channel_key_remark}]
-                                                                                </span>
+                                                                {attempts.map((attempt, idx) => {
+                                                                    const keyLabel = getAttemptKeyLabel(attempt);
+
+                                                                    return (
+                                                                        <div
+                                                                            key={idx}
+                                                                            className={cn(
+                                                                                "text-xs p-2.5 rounded-xl border transition-colors flex flex-col gap-2",
+                                                                                attempt.status === 'success'
+                                                                                    ? "bg-primary/5 border-primary/20 hover:bg-primary/10"
+                                                                                    : "bg-destructive/5 border-destructive/20 hover:bg-destructive/10"
                                                                             )}
-                                                                            <span className="text-muted-foreground">
-                                                                                ({attempt.model_name})
-                                                                            </span>
-                                                                            <span className="ml-auto text-muted-foreground tabular-nums font-mono">
-                                                                                {formatDuration(attempt.duration)}
-                                                                            </span>
-                                                                        </div>
-                                                                        {attempt.msg && (
-                                                                            <div className="text-destructive/90 pl-2 border-l-2 border-destructive/30 text-[11px] leading-relaxed">
-                                                                                {attempt.msg}
+                                                                        >
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="font-semibold text-foreground">
+                                                                                    {attempt.channel_name}
+                                                                                </span>
+                                                                                {keyLabel && (
+                                                                                    <span className="text-muted-foreground/70" title={keyLabel}>
+                                                                                        [{keyLabel}]
+                                                                                    </span>
+                                                                                )}
+                                                                                <span className="text-muted-foreground">
+                                                                                    ({attempt.model_name})
+                                                                                </span>
+                                                                                <span className="ml-auto text-muted-foreground tabular-nums font-mono">
+                                                                                    {formatDuration(attempt.duration)}
+                                                                                </span>
                                                                             </div>
-                                                                        )}
-                                                                    </div>
-                                                                ))}
+                                                                            {attempt.msg && (
+                                                                                <div className="text-destructive/90 pl-2 border-l-2 border-destructive/30 text-[11px] leading-relaxed">
+                                                                                    {attempt.msg}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })}
                                                             </div>
                                                         )}
                                                     </div>
