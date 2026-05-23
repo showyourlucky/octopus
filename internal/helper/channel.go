@@ -31,6 +31,11 @@ func ChannelBaseUrlDelayUpdate(channel *model.Channel, ctx context.Context) {
 	if channel == nil {
 		return
 	}
+	if !channel.Enabled {
+		// 渠道未启用时不应主动探测上游，避免无效 DNS/网络请求刷屏。
+		log.Debugf("跳过未启用渠道的 URL 延迟探测 (channel=%d name=%s)", channel.ID, channel.Name)
+		return
+	}
 	newBaseUrls := make([]model.BaseUrl, 0, len(channel.BaseUrls))
 	for _, baseUrl := range channel.BaseUrls {
 		if baseUrl.URL == "" {
