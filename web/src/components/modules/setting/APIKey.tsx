@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useId, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { KeyRound, Plus, Loader, Trash2, Check, X, Info, CalendarDays, Pencil, Maximize2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -24,6 +24,7 @@ import {
     type APIKey,
 } from '@/api/endpoints/apikey';
 import { useGroupList } from '@/api/endpoints/group';
+import { useModelChannelList } from '@/api/endpoints/model';
 import { useStatsAPIKey } from '@/api/endpoints/stats';
 import { cn } from '@/lib/utils';
 import { toast } from '@/components/common/Toast';
@@ -71,6 +72,10 @@ function hasModel(supported: string | undefined, model: string): boolean {
     return supported ? supported.split(',').includes(model) : false;
 }
 
+function normalizeModelAccessType(accessType: APIKey['model_access_type']): 'group' | 'all_channel' {
+    return accessType === 'all_channel' ? 'all_channel' : 'group';
+}
+
 interface APIKeyFormProps {
     apiKey?: APIKey;
     isPending: boolean;
@@ -82,6 +87,7 @@ interface APIKeyFormProps {
 function APIKeyForm({ apiKey, isPending, submitLabel, onSubmit, onClose }: APIKeyFormProps) {
     const t = useTranslations('setting');
     const { data: groups = [] } = useGroupList();
+    const { data: channelModels = [] } = useModelChannelList();
 
     const [form, setForm] = useState<Omit<APIKey, 'id' | 'api_key'>>(() => ({
         name: apiKey?.name ?? '',
@@ -89,6 +95,7 @@ function APIKeyForm({ apiKey, isPending, submitLabel, onSubmit, onClose }: APIKe
         expire_at: apiKey?.expire_at,
         max_cost: apiKey?.max_cost,
         supported_models: apiKey?.supported_models,
+        model_access_type: normalizeModelAccessType(apiKey?.model_access_type),
     }));
     const [maxCostInput, setMaxCostInput] = useState(() =>
         apiKey?.max_cost != null ? String(apiKey.max_cost) : ''
@@ -105,8 +112,16 @@ function APIKeyForm({ apiKey, isPending, submitLabel, onSubmit, onClose }: APIKe
     const [expireOpen, setExpireOpen] = useState(false);
 
     const availableModels = useMemo(() => {
-        const names = groups.map((g) => g.name).filter(Boolean);
+        const groupNames = groups.map((g) => g.name).filter(Boolean);
+        const channelNames = form.model_access_type === 'all_channel'
+            ? channelModels.map((m) => m.name).filter(Boolean)
+            : [];
+        const names = [...groupNames, ...channelNames];
         return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
+    }, [channelModels, form.model_access_type, groups]);
+
+    const groupModelSet = useMemo(() => {
+        return new Set(groups.map((g) => g.name).filter(Boolean));
     }, [groups]);
 
     const expireDate = parseExpireDate(form.expire_at);
@@ -159,6 +174,21 @@ function APIKeyForm({ apiKey, isPending, submitLabel, onSubmit, onClose }: APIKe
         setMaxCostInput('');
         updateForm({ max_cost: undefined });
     }, [updateForm]);
+
+    const handleModelAccessTypeChange = useCallback((accessType: 'group' | 'all_channel') => {
+        if (accessType === 'group' && form.supported_models) {
+            // 切回分组模式时，清理全渠道模式下选择过的渠道专属模型，避免提交隐藏白名单。
+            const nextModels = form.supported_models
+                .split(',')
+                .filter((modelName) => groupModelSet.has(modelName));
+            updateForm({
+                model_access_type: accessType,
+                supported_models: nextModels.length ? nextModels.join(',') : undefined,
+            });
+            return;
+        }
+        updateForm({ model_access_type: accessType });
+    }, [form.supported_models, groupModelSet, updateForm]);
 
     const handleSubmit = useCallback((e: React.FormEvent) => {
         e.preventDefault();
@@ -272,6 +302,35 @@ function APIKeyForm({ apiKey, isPending, submitLabel, onSubmit, onClose }: APIKe
                     >
                         {t('apiKey.form.neverExpire')}
                     </button>
+                </div>
+            </div>
+
+            <div className="grid gap-1">
+                <div className="text-xs text-muted-foreground">{t('apiKey.form.modelAccessType')}</div>
+                <div className="grid grid-cols-2 gap-2">
+                    {(['group', 'all_channel'] as const).map((accessType) => {
+                        const active = normalizeModelAccessType(form.model_access_type) === accessType;
+                        return (
+                            <button
+                                key={accessType}
+                                type="button"
+                                disabled={isPending}
+                                aria-pressed={active}
+                                onClick={() => handleModelAccessTypeChange(accessType)}
+                                className={cn(
+                                    'h-9 rounded-xl border px-3 text-sm transition-colors disabled:opacity-50',
+                                    active
+                                        ? 'border-primary/30 bg-primary text-primary-foreground'
+                                        : 'border-border bg-muted/20 text-foreground hover:bg-muted/30'
+                                )}
+                            >
+                                {t(`apiKey.form.modelAccess.${accessType}`)}
+                            </button>
+                        );
+                    })}
+                </div>
+                <div className="text-[11px] text-muted-foreground/80">
+                    {t(`apiKey.form.modelAccessHint.${normalizeModelAccessType(form.model_access_type)}`)}
                 </div>
             </div>
 

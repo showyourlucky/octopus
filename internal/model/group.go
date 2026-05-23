@@ -17,6 +17,9 @@ type Group struct {
 	FirstTokenTimeOut int         `json:"first_token_time_out"` // 单个渠道首个Token响应超时时间(秒)
 	SessionKeepTime   int         `json:"session_keep_time"`    // 会话保持时间(秒) 0 为禁用
 	Items             []GroupItem `json:"items,omitempty" gorm:"foreignKey:GroupID"`
+	// RuntimeFailoverOnRecentFailure 仅用于运行时临时分组，不落库。
+	// 当分组外模型精确匹配多个渠道时，失败过的渠道会在冷却期内排到后面。
+	RuntimeFailoverOnRecentFailure bool `json:"-" gorm:"-"`
 }
 
 type GroupItem struct {

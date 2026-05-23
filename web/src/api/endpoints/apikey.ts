@@ -16,6 +16,7 @@ export interface APIKey {
     expire_at?: number; // Unix 时间戳（秒），不传表示永不过期
     max_cost?: number; // 不传表示无限制
     supported_models?: string; // 不传表示支持所有模型
+    model_access_type?: 'group' | 'all_channel'; // group=仅分组模型，all_channel=分组+渠道模型
 }
 
 /**

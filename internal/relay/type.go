@@ -60,6 +60,7 @@ type relayRequest struct {
 	metrics         *RelayMetrics
 	apiKeyID        int
 	requestModel    string
+	group           dbmodel.Group
 	iter            *balancer.Iterator
 }
 

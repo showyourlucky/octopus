@@ -226,6 +226,15 @@
                 "expireAt": "Expire Date",
                 "selectDate": "Select date",
                 "neverExpire": "Never Expire",
+                "modelAccessType": "Model Access",
+                "modelAccess": {
+                    "group": "Group Models",
+                    "all_channel": "All Channel Models"
+                },
+                "modelAccessHint": {
+                    "group": "Only list and request models from groups",
+                    "all_channel": "List and request group models plus all channel models"
+                },
                 "supportedModels": "Supported Models",
                 "noModels": "No models available",
                 "modelsHint": "Leave empty for unlimited",

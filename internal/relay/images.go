@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/textproto"
 	"net/url"
-	"slices"
 	"strings"
 	"time"
 
@@ -96,16 +95,19 @@ func ImagesHandler(endpoint string, c *gin.Context) {
 
 	// supported_models 校验（复用 APIKeyAuth 注入）
 	supportedModels := strings.TrimSpace(c.GetString("supported_models"))
-	if supportedModels != "" {
-		supportedModelsArray := strings.Split(supportedModels, ",")
-		if !slices.Contains(supportedModelsArray, requestModel) {
-			resp.Error(c, http.StatusBadRequest, "model not supported")
-			return
-		}
+	apiKey, err := op.APIKeyGet(apiKeyID, ctx)
+	if err != nil {
+		resp.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	apiKey.SupportedModels = supportedModels
+	if !op.APIKeySupportsModel(apiKey, requestModel) {
+		resp.Error(c, http.StatusBadRequest, "model not supported")
+		return
 	}
 
 	// 获取通道分组
-	group, err := op.GroupGetEnabledMap(requestModel, ctx)
+	group, err := op.APIKeyResolveGroup(apiKey, requestModel, ctx)
 	if err != nil {
 		resp.Error(c, http.StatusNotFound, "model not found")
 		return
@@ -190,6 +192,9 @@ func ImagesHandler(endpoint string, c *gin.Context) {
 			op.ChannelKeyUpdate(usedKey)
 
 			span.End(model.AttemptSuccess, statusCode, "")
+			if group.RuntimeFailoverOnRecentFailure {
+				balancer.ClearRecentModelFailure(channel.ID, item.ModelName)
+			}
 
 			// Channel 维度统计
 			op.StatsChannelUpdate(channel.ID, model.StatsMetrics{
@@ -209,6 +214,9 @@ func ImagesHandler(endpoint string, c *gin.Context) {
 		// ====== 失败 ======
 		op.ChannelKeyUpdate(usedKey)
 		span.End(model.AttemptFailed, statusCode, fwdErr.Error())
+		if group.RuntimeFailoverOnRecentFailure {
+			balancer.RecordRecentModelFailure(channel.ID, item.ModelName)
+		}
 
 		// Channel 维度统计
 		op.StatsChannelUpdate(channel.ID, model.StatsMetrics{
@@ -376,10 +384,10 @@ func buildImagesResponseContentForLog(stream bool, upstreamCT string, usage *ima
 	}
 	// 不记录 b64_json，仅记录 usage
 	type respForLog struct {
-		Stream      bool        `json:"stream"`
-		ContentType string      `json:"content_type,omitempty"`
+		Stream      bool         `json:"stream"`
+		ContentType string       `json:"content_type,omitempty"`
 		Usage       *imagesUsage `json:"usage,omitempty"`
-		Note        string      `json:"note,omitempty"`
+		Note        string       `json:"note,omitempty"`
 	}
 	obj := respForLog{
 		Stream:      stream,
@@ -756,8 +764,8 @@ func proxySSE(ctx context.Context, c *gin.Context, respUp *http.Response, firstT
 	}
 
 	var (
-		firstWrite      = true
-		currentEvent    string
+		firstWrite       = true
+		currentEvent     string
 		completedScanner = newUsageScanner()
 	)
 

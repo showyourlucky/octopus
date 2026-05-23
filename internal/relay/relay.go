@@ -8,7 +8,6 @@ import (
 	"io"
 	"maps"
 	"net/http"
-	"slices"
 	"strings"
 	"time"
 
@@ -33,19 +32,22 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 		return
 	}
 	supportedModels := c.GetString("supported_models")
-	if supportedModels != "" {
-		supportedModelsArray := strings.Split(supportedModels, ",")
-		if !slices.Contains(supportedModelsArray, internalRequest.Model) {
-			resp.Error(c, http.StatusBadRequest, "model not supported")
-			return
-		}
-	}
 
 	requestModel := internalRequest.Model
 	apiKeyID := c.GetInt("api_key_id")
+	apiKey, err := op.APIKeyGet(apiKeyID, c.Request.Context())
+	if err != nil {
+		resp.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	apiKey.SupportedModels = supportedModels
+	if !op.APIKeySupportsModel(apiKey, requestModel) {
+		resp.Error(c, http.StatusBadRequest, "model not supported")
+		return
+	}
 
 	// 获取通道分组
-	group, err := op.GroupGetEnabledMap(requestModel, c.Request.Context())
+	group, err := op.APIKeyResolveGroup(apiKey, requestModel, c.Request.Context())
 	if err != nil {
 		resp.Error(c, http.StatusNotFound, "model not found")
 		return
@@ -69,6 +71,7 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 		metrics:         metrics,
 		apiKeyID:        apiKeyID,
 		requestModel:    requestModel,
+		group:           group,
 		iter:            iter,
 	}
 
@@ -192,6 +195,9 @@ func (ra *relayAttempt) attempt() attemptResult {
 		op.ChannelKeyUpdate(ra.usedKey)
 
 		span.End(dbmodel.AttemptSuccess, statusCode, "")
+		if ra.group.RuntimeFailoverOnRecentFailure {
+			balancer.ClearRecentModelFailure(ra.channel.ID, ra.internalRequest.Model)
+		}
 
 		// Channel 维度统计
 		op.StatsChannelUpdate(ra.channel.ID, dbmodel.StatsMetrics{
@@ -212,6 +218,9 @@ func (ra *relayAttempt) attempt() attemptResult {
 	// ====== 失败 ======
 	op.ChannelKeyUpdate(ra.usedKey)
 	span.End(dbmodel.AttemptFailed, statusCode, fwdErr.Error())
+	if ra.group.RuntimeFailoverOnRecentFailure {
+		balancer.RecordRecentModelFailure(ra.channel.ID, ra.internalRequest.Model)
+	}
 
 	// Channel 维度统计
 	op.StatsChannelUpdate(ra.channel.ID, dbmodel.StatsMetrics{

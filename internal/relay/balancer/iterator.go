@@ -25,6 +25,10 @@ type Iterator struct {
 func NewIterator(group model.Group, apiKeyID int, requestModel string) *Iterator {
 	b := GetBalancer(group.Mode)
 	candidates := b.Candidates(group.Items)
+	if group.RuntimeFailoverOnRecentFailure {
+		// 分组外精确匹配模型使用“近期失败降级”：失败渠道在冷却期内排到后面。
+		candidates = sortRecentFailuresLast(candidates, requestModel)
+	}
 
 	stickyIdx := -1
 	if group.SessionKeepTime > 0 {

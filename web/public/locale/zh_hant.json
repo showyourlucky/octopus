@@ -226,6 +226,15 @@
                 "expireAt": "過期日期",
                 "selectDate": "選擇日期",
                 "neverExpire": "永不過期",
+                "modelAccessType": "模型存取類型",
+                "modelAccess": {
+                    "group": "分組模型",
+                    "all_channel": "全渠道模型"
+                },
+                "modelAccessHint": {
+                    "group": "僅允許查詢和請求分組中的模型",
+                    "all_channel": "允許查詢和請求分組模型及所有渠道模型"
+                },
                 "supportedModels": "支援的模型",
                 "noModels": "暫無可選模型",
                 "modelsHint": "不選擇則為無限制",
