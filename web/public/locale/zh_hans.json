@@ -522,6 +522,20 @@
                 "disabled": "渠道已禁用"
             }
         },
+        "modelTest": {
+            "tooltip": "测试渠道模型",
+            "title": "测试渠道模型",
+            "model": "测试模型",
+            "selectModel": "请选择模型",
+            "start": "开始测试",
+            "testingButton": "测试中...",
+            "testing": "正在发起真实模型请求...",
+            "success": "模型 {model} 测试成功，耗时 {duration}ms",
+            "unsupportedType": "当前第一版仅支持 Chat 类渠道测试",
+            "disabledChannel": "渠道未启用，无法发起测试",
+            "noModels": "当前渠道暂无可测试模型",
+            "close": "关闭"
+        },
         "detail": {
             "title": {
                 "edit": "编辑渠道",

@@ -13,3 +13,9 @@
 - 新建渠道默认 `key_load_balance_mode` 为 `failover`，不要再把前端默认值改回 `round_robin`。
 - 负载方式下拉框必须包含 `failover`、`round_robin`、`random`，并在下方展示当前选中模式的详细说明。
 - 说明文案可能较长，表单中使用固定最大高度和 `overflow-y-auto` 展示，避免编辑弹窗被长说明撑高。
+
+## 渠道模型测试入口
+
+- 每张渠道卡片内的 Flask 图标按钮打开 `ModelTestDialog`，点击按钮必须 `stopPropagation`，避免误触发卡片详情弹层。
+- 测试弹层只展示当前渠道 `model` 与 `custom_model` 合并去重后的模型，并且第一版只允许 Chat 类渠道测试。
+- 该测试会触发真实上游请求，结果会进入现有日志、统计、熔断和自动禁用 Key 逻辑；前端状态文案需要明确这是“真实模型请求”。

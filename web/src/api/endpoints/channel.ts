@@ -142,6 +142,18 @@ export type FetchModelRequest = {
     custom_header?: CustomHeader[];
 };
 
+export type TestChannelModelRequest = {
+    channel_id: number;
+    model: string;
+};
+
+export type TestChannelModelResponse = {
+    success: boolean;
+    model: string;
+    duration_ms: number;
+    message: string;
+};
+
 /**
  * 获取渠道列表 Hook
  * 
@@ -330,6 +342,29 @@ export function useFetchModel() {
         },
         onError: (error) => {
             logger.error('模型列表获取失败:', error);
+        },
+    });
+}
+
+/**
+ * 测试指定渠道下的模型可用性。
+ * 后端会发起一次真实非流式 Chat 请求，因此测试结果会进入日志、统计、熔断和自动禁用 Key 逻辑。
+ */
+export function useTestChannelModel() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (data: TestChannelModelRequest) => {
+            return apiClient.post<TestChannelModelResponse>('/api/v1/channel/test-model', data);
+        },
+        onSuccess: (data) => {
+            logger.log('渠道模型测试成功:', data);
+        },
+        onError: (error) => {
+            logger.error('渠道模型测试失败:', error);
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ['channels', 'list'] });
         },
     });
 }

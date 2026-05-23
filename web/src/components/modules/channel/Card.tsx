@@ -4,21 +4,26 @@ import {
     MorphingDialogContainer,
     MorphingDialogContent,
 } from '@/components/ui/morphing-dialog';
-import { CheckCircle2, DollarSign, Key, Layers, MessageSquare, XCircle } from 'lucide-react';
+import { useState } from 'react';
+import { CheckCircle2, DollarSign, FlaskConical, Key, Layers, MessageSquare, XCircle } from 'lucide-react';
 import { type StatsMetricsFormatted } from '@/api/endpoints/stats';
 import { type Channel, useEnableChannel } from '@/api/endpoints/channel';
 import { CardContent } from './CardContent';
+import { ModelTestDialog } from './ModelTestDialog';
 import { useTranslations } from 'next-intl';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/animate-ui/components/animate/tooltip';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/components/common/Toast';
+import { Button } from '@/components/ui/button';
 
 export function Card({ channel, stats, layout = 'grid' }: { channel: Channel; stats: StatsMetricsFormatted; layout?: 'grid' | 'list' }) {
     const t = useTranslations('channel.card');
     const tForm = useTranslations('channel.form');
     const tSections = useTranslations('channel.detail.sections');
     const tMetrics = useTranslations('channel.detail.metrics');
+    const tModelTest = useTranslations('channel.modelTest');
     const enableChannel = useEnableChannel();
+    const [modelTestOpen, setModelTestOpen] = useState(false);
     const isListLayout = layout === 'list';
 
     const splitModels = (models: string) =>
@@ -48,9 +53,10 @@ export function Card({ channel, stats, layout = 'grid' }: { channel: Channel; st
     };
 
     return (
-        <MorphingDialog>
-            <MorphingDialogTrigger className="w-full">
-                <article className="flex flex-col gap-4 rounded-3xl border border-border bg-card text-card-foreground p-4 transition-all duration-300">
+        <>
+            <MorphingDialog>
+                <MorphingDialogTrigger className="w-full">
+                    <article className="flex flex-col gap-4 rounded-3xl border border-border bg-card text-card-foreground p-4 transition-all duration-300">
                     <header className="relative flex items-center justify-between gap-2">
                         <Tooltip side="top" sideOffset={10} align="center">
                             <TooltipTrigger asChild>
@@ -58,12 +64,31 @@ export function Card({ channel, stats, layout = 'grid' }: { channel: Channel; st
                             </TooltipTrigger>
                             <TooltipContent key={channel.name}>{channel.name}</TooltipContent>
                         </Tooltip>
-                        <Switch
-                            checked={channel.enabled}
-                            onCheckedChange={handleEnableChange}
-                            disabled={enableChannel.isPending}
-                            onClick={(e) => e.stopPropagation()}
-                        />
+                        <div className="flex shrink-0 items-center gap-2">
+                            <Tooltip side="top" sideOffset={10} align="center">
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setModelTestOpen(true);
+                                        }}
+                                    >
+                                        <FlaskConical className="size-4" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>{tModelTest('tooltip')}</TooltipContent>
+                            </Tooltip>
+                            <Switch
+                                checked={channel.enabled}
+                                onCheckedChange={handleEnableChange}
+                                disabled={enableChannel.isPending}
+                                onClick={(e) => e.stopPropagation()}
+                            />
+                        </div>
                     </header>
 
                     {isListLayout ? (
@@ -147,14 +172,16 @@ export function Card({ channel, stats, layout = 'grid' }: { channel: Channel; st
                         </dl>
                     )}
 
-                </article>
-            </MorphingDialogTrigger>
+                    </article>
+                </MorphingDialogTrigger>
 
-            <MorphingDialogContainer>
-                <MorphingDialogContent className="w-full md:max-w-3xl bg-card text-card-foreground px-4 py-2 rounded-3xl max-h-[90vh] overflow-y-auto">
-                    <CardContent channel={channel} stats={stats} />
-                </MorphingDialogContent>
-            </MorphingDialogContainer>
-        </MorphingDialog>
+                <MorphingDialogContainer>
+                    <MorphingDialogContent className="w-full md:max-w-3xl bg-card text-card-foreground px-4 py-2 rounded-3xl max-h-[90vh] overflow-y-auto">
+                        <CardContent channel={channel} stats={stats} />
+                    </MorphingDialogContent>
+                </MorphingDialogContainer>
+            </MorphingDialog>
+            <ModelTestDialog channel={channel} open={modelTestOpen} onOpenChange={setModelTestOpen} />
+        </>
     );
 }

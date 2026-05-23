@@ -34,6 +34,10 @@ type RelayMetrics struct {
 
 	// 参数覆盖
 	ParamOverride string
+
+	// 管理端渠道测试没有平台 API Key，日志需要固定名称且不能计入 API Key 维度统计。
+	SkipAPIKeyStats   bool
+	RequestAPIKeyName string
 }
 
 func NewRelayMetrics(apiKeyID int, requestModel string, req *transformerModel.InternalLLMRequest) *RelayMetrics {
@@ -100,7 +104,9 @@ func (m *RelayMetrics) Save(ctx context.Context, success bool, err error, attemp
 	op.StatsTotalUpdate(globalStats)
 	op.StatsHourlyUpdate(globalStats)
 	op.StatsDailyUpdate(context.Background(), globalStats)
-	op.StatsAPIKeyUpdate(m.APIKeyID, globalStats)
+	if !m.SkipAPIKeyStats {
+		op.StatsAPIKeyUpdate(m.APIKeyID, globalStats)
+	}
 	op.StatsChannelUpdate(channelID, globalStats)
 
 	log.Infof("relay complete: model=%s, channel=%d(%s), success=%t, duration=%dms, input_token=%d, output_token=%d, input_cost=%f, output_cost=%f, total_cost=%f, attempts=%d",
@@ -145,7 +151,9 @@ func (m *RelayMetrics) saveLog(ctx context.Context, err error, duration time.Dur
 		TotalAttempts:    len(attempts),
 	}
 
-	if apiKey, getErr := op.APIKeyGet(m.APIKeyID, ctx); getErr == nil {
+	if m.RequestAPIKeyName != "" {
+		relayLog.RequestAPIKeyName = m.RequestAPIKeyName
+	} else if apiKey, getErr := op.APIKeyGet(m.APIKeyID, ctx); getErr == nil {
 		relayLog.RequestAPIKeyName = apiKey.Name
 	}
 

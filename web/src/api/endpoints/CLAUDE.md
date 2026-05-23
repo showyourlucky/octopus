@@ -10,3 +10,9 @@
 - `APIKey.model_access_type` 可选值为 `group`、`all_channel`；前端空值按 `group` 处理，保持旧数据兼容。
 - API Key 表单在 `group` 模式下只展示分组模型；切到 `all_channel` 时展示分组模型与渠道模型去重集合。
 - 从 `all_channel` 切回 `group` 时，需要清理白名单中渠道专属模型，避免提交隐藏的不可选模型。
+
+## 渠道模型测试接口
+
+- `useTestChannelModel` 调用 `POST /api/v1/channel/test-model`，参数为 `channel_id` 和 `model`。
+- 该接口会触发真实上游 Chat 请求，并会产生日志、总统计、渠道统计、熔断和自动禁用 Key 副作用；前端文案不要暗示这是无副作用的本地校验。
+- 测试完成后需要刷新 `['channels', 'list']`，让渠道卡片统计及时体现测试请求结果。

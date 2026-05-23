@@ -75,6 +75,22 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 		iter:            iter,
 	}
 
+	result := executeRelay(req)
+	if result.Success || result.Written || result.Err == context.Canceled {
+		return
+	}
+
+	resp.Error(c, http.StatusBadGateway, "all channels failed")
+}
+
+func executeRelay(req *relayRequest) attemptResult {
+	c := req.c
+	internalRequest := req.internalRequest
+	metrics := req.metrics
+	iter := req.iter
+	requestModel := req.requestModel
+	group := req.group
+
 	var lastErr error
 
 	for iter.Next() {
@@ -82,7 +98,7 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 		case <-c.Request.Context().Done():
 			log.Infof("request context canceled, stopping retry")
 			metrics.Save(c.Request.Context(), false, context.Canceled, iter.Attempts())
-			return
+			return attemptResult{Err: context.Canceled}
 		default:
 		}
 
@@ -162,11 +178,11 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 			result := ra.attempt()
 			if result.Success {
 				metrics.Save(c.Request.Context(), true, nil, iter.Attempts())
-				return
+				return result
 			}
 			if result.Written {
 				metrics.Save(c.Request.Context(), false, result.Err, iter.Attempts())
-				return
+				return result
 			}
 			lastErr = result.Err
 		}
@@ -174,7 +190,10 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 
 	// 所有通道都失败
 	metrics.Save(c.Request.Context(), false, lastErr, iter.Attempts())
-	resp.Error(c, http.StatusBadGateway, "all channels failed")
+	if lastErr == nil {
+		lastErr = fmt.Errorf("all channels failed")
+	}
+	return attemptResult{Err: lastErr}
 }
 
 // attempt 统一管理一次通道尝试的完整生命周期
@@ -208,7 +227,9 @@ func (ra *relayAttempt) attempt() attemptResult {
 		// 熔断器：记录成功
 		balancer.RecordSuccess(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model)
 		// 会话保持：更新粘性记录
-		balancer.SetSticky(ra.apiKeyID, ra.requestModel, ra.channel.ID, ra.usedKey.ID)
+		if !ra.skipSticky {
+			balancer.SetSticky(ra.apiKeyID, ra.requestModel, ra.channel.ID, ra.usedKey.ID)
+		}
 
 		ra.metrics.ParamOverride = paramOverrideValue(ra.channel.ParamOverride)
 
@@ -539,6 +560,10 @@ func (ra *relayAttempt) handleResponse(ctx context.Context, response *http.Respo
 	if err != nil {
 		log.Warnf("failed to transform response: %v", err)
 		return fmt.Errorf("failed to transform inbound response: %w", err)
+	}
+
+	if ra.suppressResponse {
+		return nil
 	}
 
 	ra.c.Data(http.StatusOK, "application/json", inResponse)

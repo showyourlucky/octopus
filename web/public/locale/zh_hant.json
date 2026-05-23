@@ -522,6 +522,20 @@
                 "disabled": "供應源已停用"
             }
         },
+        "modelTest": {
+            "tooltip": "測試供應源模型",
+            "title": "測試供應源模型",
+            "model": "測試模型",
+            "selectModel": "請選擇模型",
+            "start": "開始測試",
+            "testingButton": "測試中...",
+            "testing": "正在發起真實模型請求...",
+            "success": "模型 {model} 測試成功，耗時 {duration}ms",
+            "unsupportedType": "目前第一版僅支援 Chat 類供應源測試",
+            "disabledChannel": "供應源未啟用，無法發起測試",
+            "noModels": "目前供應源暫無可測試模型",
+            "close": "關閉"
+        },
         "detail": {
             "title": {
                 "edit": "編輯供應源",

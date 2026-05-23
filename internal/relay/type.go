@@ -62,6 +62,10 @@ type relayRequest struct {
 	requestModel    string
 	group           dbmodel.Group
 	iter            *balancer.Iterator
+	// 渠道测试只需要判断上游是否可用，不能把上游原始响应直接写给管理端接口。
+	suppressResponse bool
+	// 渠道测试不归属平台 API Key，避免写入 api_key_id=0 的会话保持记录。
+	skipSticky bool
 }
 
 // relayAttempt 尝试级上下文

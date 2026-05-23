@@ -10,10 +10,12 @@ import (
 	"github.com/bestruirui/octopus/internal/helper"
 	"github.com/bestruirui/octopus/internal/model"
 	"github.com/bestruirui/octopus/internal/op"
+	"github.com/bestruirui/octopus/internal/relay"
 	"github.com/bestruirui/octopus/internal/server/middleware"
 	"github.com/bestruirui/octopus/internal/server/resp"
 	"github.com/bestruirui/octopus/internal/server/router"
 	"github.com/bestruirui/octopus/internal/task"
+	"github.com/bestruirui/octopus/internal/transformer/outbound"
 	"github.com/gin-gonic/gin"
 )
 
@@ -44,6 +46,10 @@ func init() {
 		AddRoute(
 			router.NewRoute("/fetch-model", http.MethodPost).
 				Handle(fetchModel),
+		).
+		AddRoute(
+			router.NewRoute("/test-model", http.MethodPost).
+				Handle(testChannelModel),
 		)
 	router.NewGroupRouter("/api/v1/channel").
 		Use(middleware.Auth()).
@@ -160,6 +166,64 @@ func fetchModel(c *gin.Context) {
 		return
 	}
 	resp.Success(c, models)
+}
+
+func testChannelModel(c *gin.Context) {
+	var request struct {
+		ChannelID int    `json:"channel_id" binding:"required"`
+		Model     string `json:"model" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		resp.Error(c, http.StatusBadRequest, resp.ErrInvalidJSON)
+		return
+	}
+	request.Model = strings.TrimSpace(request.Model)
+	if request.Model == "" {
+		resp.Error(c, http.StatusBadRequest, "模型不能为空")
+		return
+	}
+
+	channel, err := op.ChannelGet(request.ChannelID, c.Request.Context())
+	if err != nil {
+		resp.Error(c, http.StatusNotFound, "渠道不存在")
+		return
+	}
+	if !channel.Enabled {
+		resp.Error(c, http.StatusBadRequest, "渠道未启用，无法发起测试")
+		return
+	}
+	if !outbound.IsChatChannelType(channel.Type) {
+		resp.Error(c, http.StatusBadRequest, "当前第一版仅支持 Chat 类渠道测试")
+		return
+	}
+	if !channelContainsModel(channel, request.Model) {
+		resp.Error(c, http.StatusBadRequest, "模型不属于当前渠道")
+		return
+	}
+	if len(channel.GetCandidateKeys()) == 0 {
+		resp.Error(c, http.StatusBadRequest, "当前渠道没有可用 Key")
+		return
+	}
+
+	result, err := relay.ProbeChannelModel(c, *channel, request.Model)
+	if err != nil {
+		resp.Error(c, http.StatusBadGateway, err.Error())
+		return
+	}
+	resp.Success(c, result)
+}
+
+func channelContainsModel(channel *model.Channel, modelName string) bool {
+	if channel == nil {
+		return false
+	}
+	models := strings.Split(channel.Model+","+channel.CustomModel, ",")
+	for _, item := range models {
+		if strings.TrimSpace(item) == modelName {
+			return true
+		}
+	}
+	return false
 }
 
 func syncChannel(c *gin.Context) {

@@ -522,6 +522,20 @@
                 "disabled": "Channel disabled"
             }
         },
+        "modelTest": {
+            "tooltip": "Test channel model",
+            "title": "Test Channel Model",
+            "model": "Test model",
+            "selectModel": "Select a model",
+            "start": "Start Test",
+            "testingButton": "Testing...",
+            "testing": "Sending a real model request...",
+            "success": "Model {model} tested successfully in {duration}ms",
+            "unsupportedType": "This first version only supports Chat channel tests",
+            "disabledChannel": "The channel is disabled and cannot be tested",
+            "noModels": "This channel has no testable models",
+            "close": "Close"
+        },
         "detail": {
             "title": {
                 "edit": "Edit Channel",
