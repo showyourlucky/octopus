@@ -17,6 +17,12 @@ const (
 	AutoGroupTypeRegex AutoGroupType = 3 //正则匹配
 )
 
+const (
+	KeyLoadBalanceModeFailover   = "failover"
+	KeyLoadBalanceModeRoundRobin = "round_robin"
+	KeyLoadBalanceModeRandom     = "random"
+)
+
 type Channel struct {
 	ID                  int                   `json:"id" gorm:"primaryKey"`
 	Name                string                `json:"name" gorm:"unique;not null"`
@@ -36,7 +42,7 @@ type Channel struct {
 	MatchRegex          *string               `json:"match_regex"`
 	EnableMultiKeyRetry bool                  `json:"enable_multi_key_retry" gorm:"default:false"`
 	RetryCount          int                   `json:"retry_count" gorm:"default:3"`
-	KeyLoadBalanceMode  string                `json:"key_load_balance_mode" gorm:"default:'round_robin'"`
+	KeyLoadBalanceMode  string                `json:"key_load_balance_mode" gorm:"default:'failover'"`
 	AutoBanKeyFailures  int                   `json:"auto_ban_key_failures" gorm:"default:0"` // 0 means disabled
 }
 
@@ -165,6 +171,15 @@ func (c *Channel) GetChannelKey() ChannelKey {
 	return best
 }
 
+func NormalizeKeyLoadBalanceMode(mode string) string {
+	switch mode {
+	case KeyLoadBalanceModeFailover, KeyLoadBalanceModeRoundRobin, KeyLoadBalanceModeRandom:
+		return mode
+	default:
+		return KeyLoadBalanceModeFailover
+	}
+}
+
 func (c *Channel) GetCandidateKeys() []ChannelKey {
 	if c == nil || len(c.Keys) == 0 {
 		return nil
@@ -189,14 +204,23 @@ func (c *Channel) GetCandidateKeys() []ChannelKey {
 		return nil
 	}
 
-	if c.KeyLoadBalanceMode == "random" {
+	switch NormalizeKeyLoadBalanceMode(c.KeyLoadBalanceMode) {
+	case KeyLoadBalanceModeRandom:
 		rand.Shuffle(len(candidates), func(i, j int) {
 			candidates[i], candidates[j] = candidates[j], candidates[i]
 		})
-	} else {
-		// Default: Round Robin (based on LastUseTimeStamp ASC)
+	case KeyLoadBalanceModeRoundRobin:
+		// 轮询：优先选择最久未使用的 Key；时间相同时用 ID 保证排序稳定。
 		sort.Slice(candidates, func(i, j int) bool {
+			if candidates[i].LastUseTimeStamp == candidates[j].LastUseTimeStamp {
+				return candidates[i].ID < candidates[j].ID
+			}
 			return candidates[i].LastUseTimeStamp < candidates[j].LastUseTimeStamp
+		})
+	default:
+		// 故障转移：固定使用排序最靠前的可用 Key，只有失败重试时才切换到后续 Key。
+		sort.Slice(candidates, func(i, j int) bool {
+			return candidates[i].ID < candidates[j].ID
 		})
 	}
 

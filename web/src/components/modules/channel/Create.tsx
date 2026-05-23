@@ -7,7 +7,7 @@ import {
 } from '@/components/ui/morphing-dialog';
 import { useCreateChannel, ChannelType, AutoGroupType } from '@/api/endpoints/channel';
 import { useTranslations } from 'next-intl';
-import { ChannelForm, type ChannelFormData, DEFAULT_BASE_URLS } from './Form';
+import { ChannelForm, type ChannelFormData, DEFAULT_BASE_URLS, DEFAULT_KEY_LOAD_BALANCE_MODE } from './Form';
 
 export function CreateDialogContent() {
     const { setIsOpen } = useMorphingDialog();
@@ -29,7 +29,7 @@ export function CreateDialogContent() {
         match_regex: '',
         enable_multi_key_retry: false,
         retry_count: 3,
-        key_load_balance_mode: 'round_robin',
+        key_load_balance_mode: DEFAULT_KEY_LOAD_BALANCE_MODE,
         auto_ban_key_failures: 0,
     });
     const t = useTranslations('channel.create');
@@ -89,7 +89,7 @@ export function CreateDialogContent() {
                         match_regex: '',
                         enable_multi_key_retry: false,
                         retry_count: 3,
-                        key_load_balance_mode: 'round_robin',
+                        key_load_balance_mode: DEFAULT_KEY_LOAD_BALANCE_MODE,
                         auto_ban_key_failures: 0,
                     });
                     setIsOpen(false);

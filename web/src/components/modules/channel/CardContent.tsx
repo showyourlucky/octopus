@@ -24,7 +24,7 @@ import { Tabs, TabsContents, TabsContent } from '@/components/animate-ui/primiti
 import { type StatsMetricsFormatted } from '@/api/endpoints/stats';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
-import { ChannelForm, type ChannelFormData } from './Form';
+import { ChannelForm, type ChannelFormData, DEFAULT_KEY_LOAD_BALANCE_MODE } from './Form';
 import { formatMoney } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -62,7 +62,7 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
         match_regex: channel.match_regex ?? '',
         enable_multi_key_retry: channel.enable_multi_key_retry,
         retry_count: channel.retry_count,
-        key_load_balance_mode: channel.key_load_balance_mode,
+        key_load_balance_mode: channel.key_load_balance_mode || DEFAULT_KEY_LOAD_BALANCE_MODE,
         auto_ban_key_failures: channel.auto_ban_key_failures,
     });
     const t = useTranslations('channel.detail');

@@ -7,3 +7,9 @@
 - 日志中的 `key_id=xxx` 需要能回到渠道详情或编辑弹窗中快速定位到对应 Key 行，因此不要隐藏或移除 `CardContent.tsx`、`Form.tsx` 中的 Key ID 标签。
 - 不要用真实 Key 内容或后四位作为主要识别方式，避免泄露敏感信息；备注用于人类可读名称，Key ID 用于精确定位。
 - 编辑弹框使用 `md:max-w-3xl`，Key 行桌面端使用 `md:flex-nowrap`，避免加入 Key ID 标签后删除按钮被挤到下一行；移动端仍允许换行保证可用。
+
+## Key 负载方式说明
+
+- 新建渠道默认 `key_load_balance_mode` 为 `failover`，不要再把前端默认值改回 `round_robin`。
+- 负载方式下拉框必须包含 `failover`、`round_robin`、`random`，并在下方展示当前选中模式的详细说明。
+- 说明文案可能较长，表单中使用固定最大高度和 `overflow-y-auto` 展示，避免编辑弹窗被长说明撑高。

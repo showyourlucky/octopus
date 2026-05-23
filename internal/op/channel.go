@@ -28,6 +28,7 @@ func ChannelList(ctx context.Context) ([]model.Channel, error) {
 func ChannelCreate(channel *model.Channel, ctx context.Context) error {
 	keys := channel.Keys
 	channel.Keys = nil
+	channel.KeyLoadBalanceMode = model.NormalizeKeyLoadBalanceMode(channel.KeyLoadBalanceMode)
 
 	tx := db.GetDB().WithContext(ctx).Begin()
 	if err := tx.Create(channel).Error; err != nil {
@@ -208,7 +209,7 @@ func ChannelUpdate(req *model.ChannelUpdateRequest, ctx context.Context) (*model
 	}
 	if req.KeyLoadBalanceMode != nil {
 		selectFields = append(selectFields, "key_load_balance_mode")
-		updates.KeyLoadBalanceMode = *req.KeyLoadBalanceMode
+		updates.KeyLoadBalanceMode = model.NormalizeKeyLoadBalanceMode(*req.KeyLoadBalanceMode)
 	}
 	if req.AutoBanKeyFailures != nil {
 		selectFields = append(selectFields, "auto_ban_key_failures")

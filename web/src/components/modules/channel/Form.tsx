@@ -41,6 +41,14 @@ export const DEFAULT_BASE_URLS: Partial<Record<ChannelType, string>> = {
     [ChannelType.OpenAIEmbedding]: 'https://api.openai.com/v1',
 };
 
+export const DEFAULT_KEY_LOAD_BALANCE_MODE = 'failover';
+
+const KEY_LOAD_BALANCE_DESC_KEYS: Record<string, string> = {
+    failover: 'keyLoadBalanceModeDescFailover',
+    round_robin: 'keyLoadBalanceModeDescRoundRobin',
+    random: 'keyLoadBalanceModeDescRandom',
+};
+
 export interface ChannelKeyFormItem {
     id?: number;
     enabled: boolean;
@@ -130,6 +138,8 @@ export function ChannelForm({
     const customModels = formData.custom_model
         ? formData.custom_model.split(',').map((m) => m.trim()).filter(Boolean)
         : [];
+    const selectedKeyLoadBalanceDescKey = KEY_LOAD_BALANCE_DESC_KEYS[formData.key_load_balance_mode]
+        ?? KEY_LOAD_BALANCE_DESC_KEYS[DEFAULT_KEY_LOAD_BALANCE_MODE];
     const [inputValue, setInputValue] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
     const [batchImportOpen, setBatchImportOpen] = useState(false);
@@ -886,11 +896,14 @@ export function ChannelForm({
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent className="rounded-xl">
+                                                    <SelectItem className='rounded-xl' value="failover">{t('loadBalanceFailover')}</SelectItem>
                                                     <SelectItem className='rounded-xl' value="round_robin">{t('loadBalanceRoundRobin')}</SelectItem>
                                                     <SelectItem className='rounded-xl' value="random">{t('loadBalanceRandom')}</SelectItem>
                                                 </SelectContent>
                                             </Select>
-                                            <p className="text-xs text-muted-foreground">{t('keyLoadBalanceModeDesc')}</p>
+                                            <div className="max-h-24 overflow-y-auto rounded-lg border border-border bg-background/70 px-3 py-2 text-xs leading-relaxed text-muted-foreground whitespace-pre-line">
+                                                {t(selectedKeyLoadBalanceDescKey)}
+                                            </div>
                                         </div>
                                         <div className="space-y-2">
                                             <label className="text-sm font-medium text-card-foreground">
