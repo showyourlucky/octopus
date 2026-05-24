@@ -534,6 +534,12 @@
             "unsupportedType": "目前第一版僅支援 Chat 類供應源測試",
             "disabledChannel": "供應源未啟用，無法發起測試",
             "noModels": "目前供應源暫無可測試模型",
+            "key": "測試 Key",
+            "selectKey": "請選擇 Key",
+            "noKeys": "當前渠道沒有可用 Key",
+            "fallback": "允許其他 Key 接力",
+            "fallbackOffHint": "僅測試選中的 Key，失敗即失敗，便於精準定位問題 Key",
+            "fallbackOnHint": "由渠道按多 Key 重試設定自動選擇起點 Key，失敗時嘗試其他可用 Key",
             "close": "關閉"
         },
         "detail": {

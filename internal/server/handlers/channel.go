@@ -172,6 +172,9 @@ func testChannelModel(c *gin.Context) {
 	var request struct {
 		ChannelID int    `json:"channel_id" binding:"required"`
 		Model     string `json:"model" binding:"required"`
+		// KeyID 可选：指定测试时使用的 Key ID；未传时由后端按渠道默认负载策略选择。
+		// 使用 *int 区分“未指定”与“显式 0”，避免误把零值视为有效 ID。
+		KeyID *int `json:"key_id"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil {
 		resp.Error(c, http.StatusBadRequest, resp.ErrInvalidJSON)
@@ -205,7 +208,25 @@ func testChannelModel(c *gin.Context) {
 		return
 	}
 
-	result, err := relay.ProbeChannelModel(c, *channel, request.Model)
+	// 若指定了 KeyID，先在 handler 层做一次存在性 + 启用状态预校验，
+	// 让"指定 Key 不存在/已禁用"能立即返回友好提示，而不是落到 relay 内部当作 skip 处理。
+	// 真正的"锁定到该 Key + 禁止多 Key 重试"动作下沉到 relay/executeRelay，
+	// 因为 executeRelay 会通过 op.ChannelGet 重新加载完整 channel，handler 层修改 channel.Keys 无效。
+	if request.KeyID != nil {
+		var matched bool
+		for i := range channel.Keys {
+			if channel.Keys[i].ID == *request.KeyID && channel.Keys[i].Enabled {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			resp.Error(c, http.StatusBadRequest, "指定的 Key 不存在或已禁用")
+			return
+		}
+	}
+
+	result, err := relay.ProbeChannelModel(c, *channel, request.Model, request.KeyID)
 	if err != nil {
 		resp.Error(c, http.StatusBadGateway, err.Error())
 		return

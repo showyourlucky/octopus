@@ -25,7 +25,11 @@ type ChannelModelProbeResult struct {
 
 // ProbeChannelModel 固定在指定渠道上发起一次真实非流式 Chat 请求。
 // 这里复用 relayAttempt 的转发、Key 选择、熔断、统计和日志逻辑，只把候选分组收敛为单个渠道。
-func ProbeChannelModel(c *gin.Context, channel dbmodel.Channel, modelName string) (*ChannelModelProbeResult, error) {
+//
+// keyID 为可选参数：非 nil 时强制锁定到该 Key，即使渠道启用了 EnableMultiKeyRetry 也不会
+// 跨 Key 重试，便于精确定位"是哪一把 Key 不可用"；为 nil 时由渠道按默认负载策略 + 多 Key
+// 重试自然工作。
+func ProbeChannelModel(c *gin.Context, channel dbmodel.Channel, modelName string, keyID *int) (*ChannelModelProbeResult, error) {
 	content := "1+78=?"
 	stream := false
 	internalRequest := &transformerModel.InternalLLMRequest{
@@ -74,6 +78,8 @@ func ProbeChannelModel(c *gin.Context, channel dbmodel.Channel, modelName string
 		iter:             iter,
 		suppressResponse: true,
 		skipSticky:       true,
+		// 透传到 executeRelay：非 nil 时锁定单 Key、强制 maxAttempts=1，绕过多 Key 重试。
+		forceKeyID: keyID,
 	}
 
 	result := executeRelay(req)

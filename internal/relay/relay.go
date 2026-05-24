@@ -140,8 +140,30 @@ func executeRelay(req *relayRequest) attemptResult {
 			continue
 		}
 
+		// forceKeyID 用于渠道测试场景：强制锁定到指定 Key。
+		// 必须在此处过滤而不是 handler 层——上方的 op.ChannelGet 会从缓存重新加载完整 channel，
+		// 任何在 handler 层对 channel.Keys 的收敛都会被这次 reload 覆盖。
+		// 锁定后同时把 maxAttempts 收敛为 1，避免渠道 EnableMultiKeyRetry 让其他 Key 接力。
+		if req.forceKeyID != nil {
+			var matched *dbmodel.ChannelKey
+			for i := range candidateKeys {
+				if candidateKeys[i].ID == *req.forceKeyID {
+					matched = &candidateKeys[i]
+					break
+				}
+			}
+			if matched == nil {
+				// 注意：GetCandidateKeys 会按 429 冷却过滤候选 Key，handler 层只校验了 Enabled，
+				// 因此这里有可能因冷却而找不到。失败信息走 attempts，由 channelProbeFailureMessage 兜底。
+				iter.Skip(channel.ID, *req.forceKeyID, channel.Name, "",
+					fmt.Sprintf("指定 Key (id=%d) 不在候选列表（可能处于 429 冷却期）", *req.forceKeyID))
+				continue
+			}
+			candidateKeys = []dbmodel.ChannelKey{*matched}
+		}
+
 		maxAttempts := 1
-		if channel.EnableMultiKeyRetry {
+		if channel.EnableMultiKeyRetry && req.forceKeyID == nil {
 			maxAttempts = channel.RetryCount
 			if maxAttempts < 1 {
 				maxAttempts = 1

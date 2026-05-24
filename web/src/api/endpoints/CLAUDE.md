@@ -13,6 +13,7 @@
 
 ## 渠道模型测试接口
 
-- `useTestChannelModel` 调用 `POST /api/v1/channel/test-model`，参数为 `channel_id` 和 `model`。
+- `useTestChannelModel` 调用 `POST /api/v1/channel/test-model`，参数为 `channel_id`、`model`、可选 `key_id`。
+- `key_id` 未传时由后端按渠道默认负载策略选择；传入时后端会过滤 `channel.Keys` 仅留指定 Key 进行测试，匹配不到或被禁用会返回 400 `指定的 Key 不存在或已禁用`。
 - 该接口会触发真实上游 Chat 请求，并会产生日志、总统计、渠道统计、熔断和自动禁用 Key 副作用；前端文案不要暗示这是无副作用的本地校验。
 - 测试完成后需要刷新 `['channels', 'list']`，让渠道卡片统计及时体现测试请求结果。

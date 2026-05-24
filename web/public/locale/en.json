@@ -534,6 +534,12 @@
             "unsupportedType": "This first version only supports Chat channel tests",
             "disabledChannel": "The channel is disabled and cannot be tested",
             "noModels": "This channel has no testable models",
+            "key": "Test Key",
+            "selectKey": "Select a Key",
+            "noKeys": "No available keys for this channel",
+            "fallback": "Allow other keys to retry",
+            "fallbackOffHint": "Only test the selected key. If it fails, the test fails—useful for pinpointing a broken key.",
+            "fallbackOnHint": "The channel picks the starting key via its multi-key retry config; other keys take over on failure.",
             "close": "Close"
         },
         "detail": {

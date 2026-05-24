@@ -534,6 +534,12 @@
             "unsupportedType": "当前第一版仅支持 Chat 类渠道测试",
             "disabledChannel": "渠道未启用，无法发起测试",
             "noModels": "当前渠道暂无可测试模型",
+            "key": "测试 Key",
+            "selectKey": "请选择 Key",
+            "noKeys": "当前渠道没有可用 Key",
+            "fallback": "允许其他 Key 接力",
+            "fallbackOffHint": "仅测试选中的 Key，失败即失败，便于精准定位问题 Key",
+            "fallbackOnHint": "由渠道按多 Key 重试配置自动选择起点 Key，失败时尝试其他可用 Key",
             "close": "关闭"
         },
         "detail": {

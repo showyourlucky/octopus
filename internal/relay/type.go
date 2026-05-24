@@ -66,6 +66,12 @@ type relayRequest struct {
 	suppressResponse bool
 	// 渠道测试不归属平台 API Key，避免写入 api_key_id=0 的会话保持记录。
 	skipSticky bool
+	// forceKeyID 用于渠道测试场景下强制锁定使用的 Key。
+	// 当非 nil 时，executeRelay 会在拿到 candidate keys 后过滤为该 Key，并把 maxAttempts 强制为 1，
+	// 即使渠道启用了 EnableMultiKeyRetry 也不会跨 Key 重试。
+	// 注意：必须在 relay 层做此过滤而不是 handler 层——executeRelay 会通过 op.ChannelGet 从缓存
+	// 重新加载完整 channel，handler 层对 channel.Keys 的修改会被该重新加载彻底覆盖。
+	forceKeyID *int
 }
 
 // relayAttempt 尝试级上下文

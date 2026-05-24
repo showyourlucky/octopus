@@ -145,6 +145,10 @@ export type FetchModelRequest = {
 export type TestChannelModelRequest = {
     channel_id: number;
     model: string;
+    /**
+     * 可选：指定测试时使用的 Key ID；未传时由后端按渠道默认负载策略选择。
+     */
+    key_id?: number;
 };
 
 export type TestChannelModelResponse = {

@@ -25,3 +25,4 @@
 - 测试请求的日志 `request_api_key_name` 固定为 `渠道测试`，并且不能调用 `StatsAPIKeyUpdate`，避免计入设置页平台 API Key 统计。
 - 测试请求会计入总统计、渠道统计、日志、熔断和自动禁用 Key；这是设计行为，不要改成无副作用探测。
 - 管理端测试响应只返回测试摘要，不能把上游原始响应直接写给前端接口；relay 中使用 `suppressResponse` 控制这一点。
+- `ProbeChannelModel(c, channel, model, keyID *int)` 第四个参数用于锁定单 Key 精确测试。非 nil 时通过 `relayRequest.forceKeyID` 传到 `executeRelay`，由 relay 在 `GetCandidateKeys` 之后过滤候选并强制 `maxAttempts = 1`，绕过渠道 `EnableMultiKeyRetry` 的跨 Key 重试。**不要尝试在 handler 层通过修改 `channel.Keys` 实现锁定**——`executeRelay` 会用 `op.ChannelGet(item.ChannelID, ...)` 从缓存重新加载完整 channel，handler 的修改会被静默覆盖（这是一个已踩过的坑）。
