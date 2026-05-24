@@ -114,7 +114,7 @@ function APIKeyForm({ apiKey, isPending, submitLabel, onSubmit, onClose }: APIKe
     const availableModels = useMemo(() => {
         const groupNames = groups.map((g) => g.name).filter(Boolean);
         const channelNames = form.model_access_type === 'all_channel'
-            ? channelModels.map((m) => m.name).filter(Boolean)
+            ? channelModels.filter((m) => m.enabled).map((m) => m.name).filter(Boolean)
             : [];
         const names = [...groupNames, ...channelNames];
         return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));

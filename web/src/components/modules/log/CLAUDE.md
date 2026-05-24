@@ -11,3 +11,4 @@
 - 后端 `attempts` 中已有 `channel_key_id` 和 `channel_key_remark`，前端展示尝试记录时必须至少显示 `key_id=xxx`，不能只显示渠道名，否则同一渠道配置多个 Key 时无法定位限流或上游错误来源。
 - Key 备注存在时显示为 `备注 / key_id=xxx`；没有备注时仍显示 `key_id=xxx`。
 - 单次尝试日志也要在卡片渠道 Badge 和详情诊断区显示 Key 信息，不要只在多次重试 Tooltip 里展示。
+- 日志详情诊断区的渲染条件必须包含 `hasAttemptDetails`；单次成功请求通常没有错误也没有重试，但仍需要展开入口查看尝试明细和 Key 信息。
