@@ -31,7 +31,7 @@ func APIKeyVisibleModels(apiKey model.APIKey, ctx context.Context) ([]string, er
 			return nil, err
 		}
 		for _, item := range channelModels {
-			if item.Name == "" {
+			if item.Name == "" || !item.Enabled {
 				continue
 			}
 			modelSet[item.Name] = struct{}{}

@@ -337,7 +337,7 @@ export function LogCard({ log }: { log: RelayLog }) {
 
                         <MorphingDialogDescription className="flex-1 min-h-0">
                             <div className="flex flex-col min-h-0 h-full gap-4">
-                                {(hasError || hasMultipleAttempts) && (
+                                {(hasError || hasAttemptDetails) && (
                                     <div className={cn(
                                         "flex-initial min-h-0 flex flex-col rounded-2xl border overflow-hidden max-h-[40%]",
                                         hasError
