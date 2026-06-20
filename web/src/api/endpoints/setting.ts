@@ -76,6 +76,26 @@ export function useSetSetting() {
 }
 
 /**
+ * 重置熔断器状态
+ */
+export function useResetCircuitBreaker() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async () => {
+            return apiClient.post<{ reset_count: number }>('/api/v1/setting/reset-circuit-breaker');
+        },
+        onSuccess: (data) => {
+            logger.log('熔断器重置成功:', data);
+            queryClient.invalidateQueries({ queryKey: ['settings', 'list'] });
+        },
+        onError: (error) => {
+            logger.error('熔断器重置失败:', error);
+        },
+    });
+}
+
+/**
  * 数据库导入/导出
  */
 export interface DBImportResult {

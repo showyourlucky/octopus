@@ -141,6 +141,18 @@ func RecordSuccess(channelID, keyID int, modelName string) {
 	entry.TripCount = 0
 }
 
+// ResetAll 重置所有熔断器状态，清空全部熔断记录
+func ResetAll() int {
+	count := 0
+	globalBreaker.Range(func(key, value any) bool {
+		globalBreaker.Delete(key)
+		count++
+		return true
+	})
+	log.Infof("已重置所有熔断器状态，共清理 %d 条记录", count)
+	return count
+}
+
 // RecordFailure 记录失败，可能触发熔断，并返回当前的连续失败次数
 func RecordFailure(channelID, keyID int, modelName string) int64 {
 	key := circuitKey(channelID, keyID, modelName)

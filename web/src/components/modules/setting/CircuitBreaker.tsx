@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useTranslations } from 'next-intl';
-import { Zap, Hash, Timer, TimerOff, HelpCircle } from 'lucide-react';
+import { Zap, Hash, Timer, TimerOff, HelpCircle, RotateCcw } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { useSettingList, useSetSetting, SettingKey } from '@/api/endpoints/setting';
+import { Button } from '@/components/ui/button';
+import { useSettingList, useSetSetting, useResetCircuitBreaker, SettingKey } from '@/api/endpoints/setting';
 import { toast } from '@/components/common/Toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/animate-ui/components/animate/tooltip';
 
@@ -12,6 +13,7 @@ export function SettingCircuitBreaker() {
     const t = useTranslations('setting');
     const { data: settings } = useSettingList();
     const setSetting = useSetSetting();
+    const resetCircuitBreaker = useResetCircuitBreaker();
 
     const [threshold, setThreshold] = useState('');
     const [cooldown, setCooldown] = useState('');
@@ -121,6 +123,35 @@ export function SettingCircuitBreaker() {
                     placeholder={t('circuitBreaker.maxCooldown.placeholder')}
                     className="w-48 rounded-xl"
                 />
+            </div>
+
+            {/* 重置熔断时间 */}
+            <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                    <RotateCcw className="h-5 w-5 text-muted-foreground" />
+                    <span className="text-sm font-medium">{t('circuitBreaker.reset.label')}</span>
+                </div>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={resetCircuitBreaker.isPending}
+                    onClick={() => {
+                        resetCircuitBreaker.mutate(undefined, {
+                            onSuccess: () => {
+                                toast.success(t('circuitBreaker.reset.success'));
+                            },
+                            onError: () => {
+                                toast.error(t('circuitBreaker.reset.failed'));
+                            },
+                        });
+                    }}
+                    className="rounded-xl"
+                >
+                    <RotateCcw className={`h-4 w-4 mr-2 ${resetCircuitBreaker.isPending ? 'animate-spin' : ''}`} />
+                    {resetCircuitBreaker.isPending
+                        ? t('circuitBreaker.reset.resetting')
+                        : t('circuitBreaker.reset.button')}
+                </Button>
             </div>
         </div>
     );
