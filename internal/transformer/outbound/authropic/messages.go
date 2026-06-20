@@ -535,6 +535,25 @@ func convertAssistantMessage(msg model.Message) []anthropicModel.MessageParam {
 	}
 
 	content := buildMessageContent(msg)
+
+	// 当 content 为空但 reasoning_content 存在时，构建 thinking block 避免上游 API 报 "content is required"。
+	// 常见于只有思考内容而无文本输出的 assistant 消息。
+	if len(content.MultipleContent) == 0 && content.Content == nil {
+		if msg.ReasoningContent != nil && *msg.ReasoningContent != "" {
+			blocks := []anthropicModel.MessageContentBlock{{
+				Type:      "thinking",
+				Thinking:  msg.ReasoningContent,
+				Signature: msg.ReasoningSignature,
+			}}
+			return []anthropicModel.MessageParam{{
+				Role:    "assistant",
+				Content: anthropicModel.MessageContent{MultipleContent: blocks},
+			}}
+		}
+		// 既无 content 也无 reasoning_content 的空 assistant 消息，跳过避免上游拒绝
+		return nil
+	}
+
 	return []anthropicModel.MessageParam{{Role: "assistant", Content: content}}
 }
 
