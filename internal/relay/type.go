@@ -27,6 +27,11 @@ func init() {
 }
 
 // hopByHopHeaders 定义不应转发的 HTTP 头
+// 除标准 hop-by-hop 头外，还必须过滤浏览器环境头：
+// 管理端渠道模型测试等请求由浏览器发起（fetch 会带 Origin/Referer/Sec-Fetch-*/Cookie），
+// copyHeaders 会把这些头原样转发到上游；若上游服务做 CSRF 校验（校验 Origin/Referer/
+// Sec-Fetch-* 或 Cookie 会话），会把带这些头的请求误判为浏览器请求并返回 403 CSRF_INVALID，
+// 而真实 API 调用（curl/SDK）不带这些头所以正常。
 var hopByHopHeaders = map[string]bool{
 	"authorization":       true,
 	"x-api-key":           true,
@@ -51,6 +56,14 @@ var hopByHopHeaders = map[string]bool{
 	"true-client-ip":      true,
 	"x-client-ip":         true,
 	"x-cluster-client-ip": true,
+	// 浏览器环境头：不该透传给上游，避免触发上游 CSRF/安全校验
+	"cookie":            true,
+	"origin":            true,
+	"referer":           true,
+	"sec-fetch-site":    true,
+	"sec-fetch-mode":    true,
+	"sec-fetch-dest":    true,
+	"sec-fetch-user":    true,
 }
 
 type relayRequest struct {
