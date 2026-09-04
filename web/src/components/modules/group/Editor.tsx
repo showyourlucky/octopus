@@ -25,6 +25,7 @@ export type GroupEditorValues = {
     match_regex: string;
     mode: GroupMode;
     first_token_time_out: number;
+    non_stream_time_out: number;
     session_keep_time: number;
     members: SelectedMember[];
 };
@@ -256,6 +257,7 @@ export function GroupEditor({
     const [matchRegex, setMatchRegex] = useState(initial?.match_regex ?? '');
     const [mode, setMode] = useState<GroupMode>((initial?.mode ?? 1) as GroupMode);
     const [firstTokenTimeOut, setFirstTokenTimeOut] = useState<number>(initial?.first_token_time_out ?? 0);
+    const [nonStreamTimeOut, setNonStreamTimeOut] = useState<number>(initial?.non_stream_time_out ?? 0);
     const [sessionKeepTime, setSessionKeepTime] = useState<number>(initial?.session_keep_time ?? 0);
     const [selectedMembers, setSelectedMembers] = useState<SelectedMember[]>(initial?.members ?? []);
     const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
@@ -339,6 +341,7 @@ export function GroupEditor({
             match_regex: regexKey,
             mode,
             first_token_time_out: firstTokenTimeOut,
+            non_stream_time_out: nonStreamTimeOut,
             session_keep_time: sessionKeepTime,
             members: selectedMembers,
         });
@@ -404,6 +407,40 @@ export function GroupEditor({
                                     }
                                     const n = Number.parseInt(raw, 10);
                                     setFirstTokenTimeOut(Number.isFinite(n) && n > 0 ? n : 0);
+                                }}
+                                className="rounded-xl"
+                            />
+                        </Field>
+
+                        <Field>
+                            <FieldLabel htmlFor="group-non-stream-time-out">
+                                {t('form.nonStreamTimeOut')}
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <HelpCircle className="size-4 text-muted-foreground cursor-help" />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            {t('form.nonStreamTimeOutHint')}
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </FieldLabel>
+                            <Input
+                                id="group-non-stream-time-out"
+                                type="number"
+                                inputMode="numeric"
+                                min={0}
+                                step={1}
+                                value={String(nonStreamTimeOut)}
+                                onChange={(e) => {
+                                    const raw = e.target.value;
+                                    if (raw.trim() === '') {
+                                        setNonStreamTimeOut(0);
+                                        return;
+                                    }
+                                    const n = Number.parseInt(raw, 10);
+                                    setNonStreamTimeOut(Number.isFinite(n) && n > 0 ? n : 0);
                                 }}
                                 className="rounded-xl"
                             />

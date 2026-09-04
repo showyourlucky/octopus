@@ -355,8 +355,14 @@
             },
             "clear": {
                 "label": "清空历史日志",
+                "hint": "清空后会立刻整库回收磁盘。回收期间整站可能假死数分钟（转发、后台都会卡住）。",
                 "button": "清空",
-                "clearing": "清空中..."
+                "clearing": "回收中...",
+                "confirmTitle": "确认清空日志？",
+                "confirmDescription": "日志删除后会立刻对整个 SQLite 文件做磁盘回收。回收期间整站可能假死数分钟：转发请求、写日志、改配置都会卡住。请在页面等到完成，不要关闭或重复点击。",
+                "confirm": "确认清空",
+                "cancel": "取消",
+                "vacuumHint": "正在回收磁盘，整站可能假死数分钟，请勿关闭页面"
             },
             "clearSuccess": "日志已清空",
             "clearFailed": "清空失败"
@@ -399,6 +405,8 @@
             "matchRegexInvalid": "正则无效",
             "firstTokenTimeOut": "首字超时",
             "firstTokenTimeOutHint": "单位秒，仅流式响应起效，0 表示不限制",
+            "nonStreamTimeOut": "非流式超时",
+            "nonStreamTimeOutHint": "单位秒，仅非流式响应起效，0 表示不限制",
             "sessionKeepTime": "会话保持",
             "sessionKeepTimeHint": "单位秒，会话期间保持使用同一渠道，0 表示禁用",
             "items": "已选模型",

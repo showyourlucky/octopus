@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -188,13 +189,14 @@ func executeRelay(req *relayRequest) attemptResult {
 				requestModel, group.Mode, channel.Name, item.ModelName, usedKey.ID,
 				iter.Index()+1, iter.Len(), i+1, maxAttempts, iter.IsSticky())
 
-			// 构造尝试级上下文 -- 只写变化的 4 个字段
+			// 构造尝试级上下文
 			ra := &relayAttempt{
 				relayRequest:         req,
 				outAdapter:           outAdapter,
 				channel:              channel,
 				usedKey:              usedKey,
 				firstTokenTimeOutSec: group.FirstTokenTimeOut,
+				nonStreamTimeOutSec:  group.NonStreamTimeOut,
 			}
 
 			result := ra.attempt()
@@ -327,7 +329,12 @@ func parseRequest(inboundType inbound.InboundType, c *gin.Context) (*model.Inter
 // forward 转发请求到上游服务
 func (ra *relayAttempt) forward() (int, error) {
 	ctx := ra.c.Request.Context()
-
+	isStream := ra.internalRequest.Stream != nil && *ra.internalRequest.Stream
+	if !isStream && ra.nonStreamTimeOutSec > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(ra.nonStreamTimeOutSec)*time.Second)
+		defer cancel()
+	}
 	// 构建出站请求
 	outboundRequest, err := ra.outAdapter.TransformRequest(
 		ctx,
@@ -376,7 +383,7 @@ func (ra *relayAttempt) forward() (int, error) {
 	// 发送请求
 	response, err := ra.sendRequest(outboundRequest)
 	if err != nil {
-		return 0, fmt.Errorf("failed to send request: %w", err)
+		return 0, wrapNonStreamTimeoutErr(fmt.Errorf("failed to send request: %w", err), ra.nonStreamTimeOutSec)
 	}
 	defer response.Body.Close()
 
@@ -384,20 +391,20 @@ func (ra *relayAttempt) forward() (int, error) {
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		body, err := io.ReadAll(response.Body)
 		if err != nil {
-			return 0, fmt.Errorf("failed to read response body: %w", err)
+			return 0, wrapNonStreamTimeoutErr(fmt.Errorf("failed to read response body: %w", err), ra.nonStreamTimeOutSec)
 		}
 		return 0, fmt.Errorf("upstream error: %d: %s", response.StatusCode, string(body))
 	}
 
 	// 处理响应
-	if ra.internalRequest.Stream != nil && *ra.internalRequest.Stream {
+	if isStream {
 		if err := ra.handleStreamResponse(ctx, response); err != nil {
 			return 0, err
 		}
 		return response.StatusCode, nil
 	}
 	if err := ra.handleResponse(ctx, response); err != nil {
-		return 0, err
+		return 0, wrapNonStreamTimeoutErr(err, ra.nonStreamTimeOutSec)
 	}
 	return response.StatusCode, nil
 }
@@ -609,4 +616,12 @@ func paramOverrideValue(ptr *string) string {
 		return ""
 	}
 	return *ptr
+}
+
+func wrapNonStreamTimeoutErr(err error, timeoutSec int) error {
+	if err == nil || timeoutSec <= 0 || !errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	log.Warnf("non-stream timeout (%ds), switching channel", timeoutSec)
+	return fmt.Errorf("non-stream timeout (%ds)", timeoutSec)
 }

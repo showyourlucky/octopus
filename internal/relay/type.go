@@ -95,6 +95,7 @@ type relayAttempt struct {
 	channel              *dbmodel.Channel
 	usedKey              dbmodel.ChannelKey
 	firstTokenTimeOutSec int
+	nonStreamTimeOutSec  int
 }
 
 // attemptResult 封装单次尝试的结果

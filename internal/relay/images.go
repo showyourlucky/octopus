@@ -174,7 +174,7 @@ func ImagesHandler(endpoint string, c *gin.Context) {
 		span := iter.StartAttempt(channel.ID, usedKey.ID, channel.Name, usedKey.Remark)
 
 		// 尝试一次转发
-		statusCode, written, usage, upstreamCT, fwdErr := imagesAttempt(ctx, endpoint, c, bc, isMultipart, boundary, jsonPayload, stream, channel, usedKey.ChannelKey, group.FirstTokenTimeOut, metrics, item.ModelName)
+		statusCode, written, usage, upstreamCT, fwdErr := imagesAttempt(ctx, endpoint, c, bc, isMultipart, boundary, jsonPayload, stream, channel, usedKey.ChannelKey, group.FirstTokenTimeOut, group.NonStreamTimeOut, metrics, item.ModelName)
 
 		// 更新 channel key 状态
 		usedKey.StatusCode = statusCode
@@ -513,9 +513,21 @@ func imagesAttempt(
 	channel *model.Channel,
 	channelKey string,
 	firstTokenTimeOutSec int,
+	nonStreamTimeOutSec int,
 	metrics *imagesRelayMetrics,
 	actualModel string,
 ) (statusCode int, written bool, usage *imagesUsage, upstreamCT string, err error) {
+	if !stream && nonStreamTimeOutSec > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(nonStreamTimeOutSec)*time.Second)
+		defer cancel()
+	}
+	defer func() {
+		if !stream {
+			err = wrapNonStreamTimeoutErr(err, nonStreamTimeOutSec)
+		}
+	}()
+
 	// 构建 URL（baseUrl.Path 后追加 endpoint）
 	baseURL := channel.GetBaseUrl()
 	parsedURL, err := url.Parse(strings.TrimSuffix(baseURL, "/"))

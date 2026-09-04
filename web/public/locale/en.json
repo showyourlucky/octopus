@@ -355,8 +355,14 @@
             },
             "clear": {
                 "label": "Clear History Logs",
+                "hint": "Clearing immediately compacts the whole SQLite file. The entire service may freeze for several minutes (relay and admin included).",
                 "button": "Clear",
-                "clearing": "Clearing..."
+                "clearing": "Reclaiming...",
+                "confirmTitle": "Clear all logs?",
+                "confirmDescription": "After deletion, the whole SQLite file is compacted. The entire service may freeze for several minutes: relay, log writes, and settings updates will stall. Stay on this page until it finishes. Do not close it or click again.",
+                "confirm": "Clear logs",
+                "cancel": "Cancel",
+                "vacuumHint": "Compacting disk. The entire service may freeze for several minutes — do not close this page."
             },
             "clearSuccess": "Logs cleared",
             "clearFailed": "Failed to clear logs"
@@ -399,6 +405,8 @@
             "matchRegexInvalid": "Invalid regex",
             "firstTokenTimeOut": "First Token Timeout",
             "firstTokenTimeOutHint": "Unit: seconds, only effective for streaming response, 0 = no limit",
+            "nonStreamTimeOut": "Non-Stream Timeout",
+            "nonStreamTimeOutHint": "Unit: seconds, only effective for non-streaming response, 0 = no limit",
             "sessionKeepTime": "Session Keep Time",
             "sessionKeepTimeHint": "Unit: seconds, keeps using the same channel within a session, 0 = disabled",
             "items": "Selected Models",

@@ -6,6 +6,16 @@ import { ScrollText, Calendar, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useSettingList, useSetSetting, SettingKey } from '@/api/endpoints/setting';
 import { useClearLogs } from '@/api/endpoints/log';
 import { toast } from '@/components/common/Toast';
@@ -19,6 +29,7 @@ export function SettingLog() {
     const [enabled, setEnabled] = useState(true);
     const [keepPeriod, setKeepPeriod] = useState('7');
     const [isClearing, setIsClearing] = useState(false);
+    const [confirmOpen, setConfirmOpen] = useState(false);
 
     const initialEnabled = useRef(true);
     const initialKeepPeriod = useRef('7');
@@ -67,13 +78,17 @@ export function SettingLog() {
     };
 
     const handleClearLogs = () => {
+        setConfirmOpen(false);
         setIsClearing(true);
+        const toastId = toast.loading(t('log.clear.vacuumHint'));
         clearLogs.mutate(undefined, {
             onSuccess: () => {
+                toast.dismiss(toastId);
                 toast.success(t('log.clearSuccess'));
                 setIsClearing(false);
             },
             onError: () => {
+                toast.dismiss(toastId);
                 toast.error(t('log.clearFailed'));
                 setIsClearing(false);
             }
@@ -118,20 +133,44 @@ export function SettingLog() {
 
             {/* 清空历史日志 */}
             <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                    <Trash2 className="h-5 w-5 text-muted-foreground" />
-                    <span className="text-sm font-medium">{t('log.clear.label')}</span>
+                <div className="flex items-center gap-3 min-w-0">
+                    <Trash2 className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <div className="min-w-0 space-y-1">
+                        <span className="text-sm font-medium">{t('log.clear.label')}</span>
+                        <p className="text-xs text-muted-foreground leading-relaxed">{t('log.clear.hint')}</p>
+                    </div>
                 </div>
                 <Button
                     variant="destructive"
                     size="sm"
-                    onClick={handleClearLogs}
+                    onClick={() => setConfirmOpen(true)}
                     disabled={isClearing}
-                    className="rounded-xl"
+                    className="rounded-xl shrink-0"
                 >
                     {isClearing ? t('log.clear.clearing') : t('log.clear.button')}
                 </Button>
             </div>
+
+            <AlertDialog open={confirmOpen} onOpenChange={(open) => { if (!isClearing) setConfirmOpen(open); }}>
+                <AlertDialogContent className="rounded-xl">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>{t('log.clear.confirmTitle')}</AlertDialogTitle>
+                        <AlertDialogDescription>{t('log.clear.confirmDescription')}</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel className="rounded-xl" disabled={isClearing}>
+                            {t('log.clear.cancel')}
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={handleClearLogs}
+                            disabled={isClearing}
+                        >
+                            {t('log.clear.confirm')}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

@@ -262,7 +262,10 @@ func RelayLogClear(ctx context.Context) error {
 	relayLogCacheLock.Lock()
 	relayLogCache = make([]model.RelayLog, 0, relayLogMaxSize)
 	relayLogCacheLock.Unlock()
-	return db.GetDB().WithContext(ctx).Where("1 = 1").Delete(&model.RelayLog{}).Error
+	if err := db.GetDB().WithContext(ctx).Where("1 = 1").Delete(&model.RelayLog{}).Error; err != nil {
+		return err
+	}
+	return db.Vacuum()
 }
 
 func applyRelayLogFilterQuery(query *gorm.DB, filter *model.RelayLogListFilter) *gorm.DB {
