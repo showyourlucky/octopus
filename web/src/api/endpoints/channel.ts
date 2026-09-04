@@ -70,6 +70,11 @@ export type Channel = {
     retry_count: number;
     key_load_balance_mode: string;
     auto_ban_key_failures: number; // 0 means disabled
+	    auto_enable_key: boolean;
+	    auto_enable_strategy: string; // fixed / daily / backoff
+	    auto_enable_delay_min: number; // 固定延迟/退避基础延迟（分钟）
+	    auto_enable_backoff_max_min: number; // 退避上限（分钟）
+	    auto_enable_daily_time: string; // 每日定点 HH:MM
     stats: StatsChannel;
 };
 
@@ -102,6 +107,11 @@ export type CreateChannelRequest = {
     retry_count?: number;
     key_load_balance_mode?: string;
     auto_ban_key_failures?: number;
+    auto_enable_key?: boolean;
+    auto_enable_strategy?: string;
+    auto_enable_delay_min?: number;
+    auto_enable_backoff_max_min?: number;
+    auto_enable_daily_time?: string;
 };
 
 /**
@@ -126,6 +136,11 @@ export type UpdateChannelRequest = {
     retry_count?: number;
     key_load_balance_mode?: string;
     auto_ban_key_failures?: number;
+    auto_enable_key?: boolean;
+    auto_enable_strategy?: string;
+    auto_enable_delay_min?: number;
+    auto_enable_backoff_max_min?: number;
+    auto_enable_daily_time?: string;
     // keys diff
     keys_to_add?: Array<Pick<ChannelKey, 'enabled' | 'channel_key' | 'remark'>>;
     keys_to_update?: Array<{ id: number; enabled?: boolean; channel_key?: string; remark?: string }>;

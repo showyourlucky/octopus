@@ -2,6 +2,7 @@ package balancer
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -150,6 +151,24 @@ func ResetAll() int {
 		return true
 	})
 	log.Infof("已重置所有熔断器状态，共清理 %d 条记录", count)
+	return count
+}
+
+// ResetCircuit 重置指定 channelID:keyID 的熔断器，清理该 Key 全部 model 维度条目。
+// 用于自动启用 Key 后立即恢复其使用资格（否则 Iterator.SkipCircuitBreak 会继续跳过）。
+func ResetCircuit(channelID, keyID int) int {
+	prefix := circuitKey(channelID, keyID, "") // 形如 "<channelID>:<keyID>:"
+	count := 0
+	globalBreaker.Range(func(key, value any) bool {
+		if ks, ok := key.(string); ok && strings.HasPrefix(ks, prefix) {
+			globalBreaker.Delete(key)
+			count++
+		}
+		return true
+	})
+	if count > 0 {
+		log.Infof("circuit breaker reset for channelID=%d keyID=%d, cleaned %d entries", channelID, keyID, count)
+	}
 	return count
 }
 

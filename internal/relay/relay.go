@@ -277,6 +277,8 @@ func (ra *relayAttempt) attempt() attemptResult {
 	// 自动禁用 Key 检查
 	if ra.channel.AutoBanKeyFailures > 0 && failures >= int64(ra.channel.AutoBanKeyFailures) {
 		ra.usedKey.Enabled = false
+		ra.usedKey.AutoBanCount++
+		ra.usedKey.DisabledAt = time.Now().Unix()
 		ra.usedKey.Remark += fmt.Sprintf(" [Auto banned: %d failures]", failures)
 		op.ChannelKeyUpdate(ra.usedKey)
 		log.Warnf("channel key %d disabled due to excessive failures (%d >= %d)",

@@ -24,3 +24,12 @@
 - 不要尝试在 handler 层重排 `channel.Keys` 来"指定 Key 优先 + 失败回退"：`Channel.GetCandidateKeys()` 会按 `key_load_balance_mode` 重排（failover 按 ID 升序、round_robin 按 LastUseTimeStamp、random 随机），handler 的重排会被覆盖。更关键的是 `executeRelay` 会通过 `op.ChannelGet` 从缓存重新加载完整 channel，handler 层任何对 `channel.Keys` 的收敛都会被静默覆盖。Key 锁定必须由后端 `relayRequest.forceKeyID` 在 relay 层执行——见 `internal/relay/CLAUDE.md` 渠道模型测试段。前端只需把 `key_id` 透传给 `/api/v1/channel/test-model`。
 - 弹层使用两个独立的 `useEffect`：**Effect 1 只依赖 `open` 状态**负责打开时 `resetTestState()`、关闭时清空 `selectedKeyId` 和 `allowKeyFallback`；**Effect 2 依赖 `enabledKeys`** 但只在"当前选中已失效"时回到首个 Key。不要把这两件事合到一个依赖 `enabledKeys` 的 effect 里——`useTestChannelModel.onSettled` 会 `invalidate ['channels','list']`，导致 `channel.keys` 引用变化，合并写法会把刚出来的成功/失败结果立刻擦掉。
 - `StatusBox` 内文本必须使用 `min-w-0 break-all wrap-anywhere` + 外层 `max-w-full overflow-hidden`，否则错误信息中的长 URL 或无空格字符串会突破 Dialog 边界。Tailwind v4 中正确 utility 是 `wrap-anywhere`（不是 `overflow-wrap-anywhere`）。
+
+## 自动启用已禁用 Key
+
+- 渠道编辑表单在「启用多Key重试」块下方新增「自动启用已禁用Key」开关与策略配置区（`Form.tsx`）。
+- 策略：固定延迟 / 每日定点 / 指数退避，对应 `auto_enable_strategy` 的 `fixed` / `daily` / `backoff`。
+- 数值统一按**分钟**整数存储（`auto_enable_delay_min` / `auto_enable_backoff_max_min`），UI 提供 分钟/小时/天 单位下拉换算；切换单位只改变显示数值，不改变已存分钟数。
+- 单位下拉的初始值必须按已存分钟数自动挑选（`pickBestUnit`，天 > 小时 > 分钟且优先整除，否则回退分钟），**不要硬编码默认小时/天**——否则 3 分钟存成 3 后重开表单会以“小时”显示并四舍五入成 0。
+- 每日定点时间内部存储为 `00:00`–`23:59`（`auto_enable_daily_time`）；UI 显示 "24:00" 表示凌晨零点，输入 "24:00" 时存储转 "00:00"，默认显示 "24:00"。
+- 新增 locale 文案命名遵循 `autoEnable*` 前缀，参考 `enableMultiKeyRetry` / `autoBanKeyFailures` 的命名风格；新建与编辑（Create.tsx / CardContent.tsx）都要带上这 5 个字段，编辑态仅 diff 变更字段。

@@ -78,8 +78,12 @@ export interface ChannelFormData {
     retry_count: number;
     key_load_balance_mode: string;
     auto_ban_key_failures: number;
+    auto_enable_key: boolean;
+    auto_enable_strategy: string;
+    auto_enable_delay_min: number;
+    auto_enable_backoff_max_min: number;
+    auto_enable_daily_time: string;
 }
-
 export interface ChannelFormProps {
     formData: ChannelFormData;
     onFormDataChange: (data: ChannelFormData) => void;
@@ -144,6 +148,60 @@ export function ChannelForm({
     const inputRef = useRef<HTMLInputElement>(null);
     const [batchImportOpen, setBatchImportOpen] = useState(false);
     
+    // ===== 自动启用已禁用 Key 配置（单位换算，后端统一存分钟） =====
+    const UNIT_FACTORS: Record<string, number> = { min: 1, hour: 60, day: 1440 };
+    // 根据已存分钟数挑选最合适的显示单位（天 > 小时 > 分钟，优先整除），
+    // 避免小数值（如 3 分钟）在“小时”单位下被 Math.round 四舍五入显示成 0。
+    const pickBestUnit = (minutes: number): string => {
+        for (const unit of ['day', 'hour', 'min']) {
+            if (minutes > 0 && minutes % UNIT_FACTORS[unit] === 0) return unit;
+        }
+        return 'min';
+    };
+    const [delayUnit, setDelayUnit] = useState<string>(() => pickBestUnit(formData.auto_enable_delay_min));
+    const [backoffMaxUnit, setBackoffMaxUnit] = useState<string>(() => pickBestUnit(formData.auto_enable_backoff_max_min));
+    const [dailyTimeInput, setDailyTimeInput] = useState(() =>
+        formData.auto_enable_daily_time === '00:00' ? '24:00' : formData.auto_enable_daily_time
+    );
+    const displayDelayValue = Math.round(formData.auto_enable_delay_min / (UNIT_FACTORS[delayUnit] ?? 1));
+    const displayBackoffMaxValue = Math.round(formData.auto_enable_backoff_max_min / (UNIT_FACTORS[backoffMaxUnit] ?? 1));
+    const autoEnableStrategyDescKey =
+        formData.auto_enable_strategy === 'daily' ? 'autoEnableStrategyDailyDesc'
+        : formData.auto_enable_strategy === 'backoff' ? 'autoEnableStrategyBackoffDesc'
+        : 'autoEnableStrategyFixedDesc';
+    // 外部 formData（如切换编辑对象）变化时同步本地时间输入
+    useEffect(() => {
+        setDailyTimeInput(formData.auto_enable_daily_time === '00:00' ? '24:00' : formData.auto_enable_daily_time);
+    }, [formData.auto_enable_daily_time]);
+    const handleDelayUnitChange = (unit: string) => {
+        if (UNIT_FACTORS[unit] != null) setDelayUnit(unit);
+    };
+    const handleDelayValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = parseInt(e.target.value, 10);
+        if (!isNaN(val)) {
+            onFormDataChange({ ...formData, auto_enable_delay_min: Math.max(0, val * UNIT_FACTORS[delayUnit]) });
+        }
+    };
+    const handleBackoffMaxUnitChange = (unit: string) => {
+        if (UNIT_FACTORS[unit] != null) setBackoffMaxUnit(unit);
+    };
+    const handleBackoffMaxValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = parseInt(e.target.value, 10);
+        if (!isNaN(val)) {
+            onFormDataChange({ ...formData, auto_enable_backoff_max_min: Math.max(0, val * UNIT_FACTORS[backoffMaxUnit]) });
+        }
+    };
+    const handleDailyTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const v = e.target.value;
+        setDailyTimeInput(v);
+        if (v === '24:00') {
+            // 用户明确要求的“凌晨24点”：存储转 00:00
+            onFormDataChange({ ...formData, auto_enable_daily_time: '00:00' });
+        } else if (/^([01]\d|2[0-3]):[0-5]\d$/.test(v)) {
+            onFormDataChange({ ...formData, auto_enable_daily_time: v });
+        }
+    };
+
     // keys分页
     const [keyPage, setKeyPage] = useState(1);
     const [keyPageInput, setKeyPageInput] = useState('1');
@@ -923,6 +981,122 @@ export function ChannelForm({
                                             />
                                             <p className="text-xs text-muted-foreground">{t('autoBanKeyFailuresDesc')}</p>
                                         </div>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="space-y-2 col-span-1 md:col-span-2 border rounded-xl p-4 bg-muted/20">
+                                <div className="flex items-center justify-between">
+                                    <div className="space-y-0.5">
+                                        <label className="text-sm font-medium text-card-foreground">
+                                            {t('autoEnableKey')}
+                                        </label>
+                                        <p className="text-xs text-muted-foreground">
+                                            {t('autoEnableKeyDesc')}
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        checked={formData.auto_enable_key}
+                                        onCheckedChange={(checked) => onFormDataChange({ ...formData, auto_enable_key: checked })}
+                                    />
+                                </div>
+
+                                {formData.auto_enable_key && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-card-foreground">
+                                                {t('autoEnableStrategy')}
+                                            </label>
+                                            <Select
+                                                value={formData.auto_enable_strategy}
+                                                onValueChange={(value) => onFormDataChange({ ...formData, auto_enable_strategy: value })}
+                                            >
+                                                <SelectTrigger className="rounded-xl w-full border border-border px-4 py-2 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent className="rounded-xl">
+                                                    <SelectItem className='rounded-xl' value="fixed">{t('autoEnableStrategyFixed')}</SelectItem>
+                                                    <SelectItem className='rounded-xl' value="daily">{t('autoEnableStrategyDaily')}</SelectItem>
+                                                    <SelectItem className='rounded-xl' value="backoff">{t('autoEnableStrategyBackoff')}</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            <div className="max-h-24 overflow-y-auto rounded-lg border border-border bg-background/70 px-3 py-2 text-xs leading-relaxed text-muted-foreground whitespace-pre-line">
+                                                {t(autoEnableStrategyDescKey)}
+                                            </div>
+                                        </div>
+
+                                        {(formData.auto_enable_strategy === 'fixed' || formData.auto_enable_strategy === 'backoff') && (
+                                            <div className="space-y-2">
+                                                <label className="text-sm font-medium text-card-foreground">
+                                                    {formData.auto_enable_strategy === 'backoff' ? t('autoEnableBaseDelay') : t('autoEnableDelay')}
+                                                </label>
+                                                <div className="flex gap-2">
+                                                    <Input
+                                                        type="number"
+                                                        min={0}
+                                                        value={displayDelayValue}
+                                                        onChange={handleDelayValueChange}
+                                                        className="rounded-xl flex-1"
+                                                    />
+                                                    <Select value={delayUnit} onValueChange={handleDelayUnitChange}>
+                                                        <SelectTrigger className="rounded-xl w-24 border border-border px-3 py-2 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent className="rounded-xl">
+                                                            <SelectItem value="min">{t('unitMinute')}</SelectItem>
+                                                            <SelectItem value="hour">{t('unitHour')}</SelectItem>
+                                                            <SelectItem value="day">{t('unitDay')}</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {formData.auto_enable_strategy === 'backoff' ? t('autoEnableBaseDelayDesc') : t('autoEnableDelayDesc')}
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {formData.auto_enable_strategy === 'backoff' && (
+                                            <div className="space-y-2">
+                                                <label className="text-sm font-medium text-card-foreground">
+                                                    {t('autoEnableBackoffMax')}
+                                                </label>
+                                                <div className="flex gap-2">
+                                                    <Input
+                                                        type="number"
+                                                        min={0}
+                                                        value={displayBackoffMaxValue}
+                                                        onChange={handleBackoffMaxValueChange}
+                                                        className="rounded-xl flex-1"
+                                                    />
+                                                    <Select value={backoffMaxUnit} onValueChange={handleBackoffMaxUnitChange}>
+                                                        <SelectTrigger className="rounded-xl w-24 border border-border px-3 py-2 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent className="rounded-xl">
+                                                            <SelectItem value="min">{t('unitMinute')}</SelectItem>
+                                                            <SelectItem value="hour">{t('unitHour')}</SelectItem>
+                                                            <SelectItem value="day">{t('unitDay')}</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <p className="text-xs text-muted-foreground">{t('autoEnableBackoffMaxDesc')}</p>
+                                            </div>
+                                        )}
+
+                                        {formData.auto_enable_strategy === 'daily' && (
+                                            <div className="space-y-2">
+                                                <label className="text-sm font-medium text-card-foreground">
+                                                    {t('autoEnableDailyTime')}
+                                                </label>
+                                                <Input
+                                                    type="text"
+                                                    value={dailyTimeInput}
+                                                    onChange={handleDailyTimeChange}
+                                                    placeholder="24:00"
+                                                    className="rounded-xl"
+                                                />
+                                                <p className="text-xs text-muted-foreground">{t('autoEnableDailyTimeDesc')}</p>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>

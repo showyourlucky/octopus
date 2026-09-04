@@ -26,3 +26,12 @@
 - 测试请求会计入总统计、渠道统计、日志、熔断和自动禁用 Key；这是设计行为，不要改成无副作用探测。
 - 管理端测试响应只返回测试摘要，不能把上游原始响应直接写给前端接口；relay 中使用 `suppressResponse` 控制这一点。
 - `ProbeChannelModel(c, channel, model, keyID *int)` 第四个参数用于锁定单 Key 精确测试。非 nil 时通过 `relayRequest.forceKeyID` 传到 `executeRelay`，由 relay 在 `GetCandidateKeys` 之后过滤候选并强制 `maxAttempts = 1`，绕过渠道 `EnableMultiKeyRetry` 的跨 Key 重试。**不要尝试在 handler 层通过修改 `channel.Keys` 实现锁定**——`executeRelay` 会用 `op.ChannelGet(item.ChannelID, ...)` 从缓存重新加载完整 channel，handler 的修改会被静默覆盖（这是一个已踩过的坑）。
+
+## 渠道 Key 自动启用
+
+- relay.go 自动禁用点：触发禁用时 `AutoBanCount++`、写入 `DisabledAt=now`，remark 格式保持 ` [Auto banned: %d failures]` 不变。
+- `internal/task/auto_enable_key.go` 扫描器每 5 分钟（启动即跑一次）遍历内存渠道缓存，对满足 `!Enabled && AutoBanCount>0` 的 Key 按渠道策略（fixed / daily / backoff）自动启用：置 `Enabled=true`（**AutoBanCount 保留不归零**，保留退避语义）、重置熔断器 `balancer.ResetCircuit(channelID, keyID)`（清理该 key 全部 model 维度条目，否则 `Iterator.SkipCircuitBreak` 会继续跳过它）、走 `op.ChannelKeyEnableIfDue`（内存缓存 + 脏标记路径，落库仍由优雅停机 `SaveCache` 触发）。
+- 手动改 Key 状态（`KeysToUpdate` 中 `Enabled` 非 nil）会把 `AutoBanCount` 清零；渠道开关 false→true 会把该渠道所有自动禁用 Key 的 `DisabledAt` 重置为当前时刻（计时重新开始，不补启用）。
+- 并发正确性：`op.ChannelKeyUpdate` / `op.ChannelKeyEnableIfDue` 通过 `channelCacheMu` 串行化 `channelCache` 的读-改-写，避免并发更新互相覆盖（lost update）——扫描器自动启用与 relay 对同渠道其它 Key 的更新并发时，启用结果不会被旧快照覆盖。`enableKey` 不再就地修改传入的 key；实际启用由 `ChannelKeyEnableIfDue` 在锁内以最新状态复核「仍禁用 + 已到期」后原子完成。
+- 渠道编辑/开关（`ChannelUpdate` / `ChannelEnabled`）在事务前先 `ChannelKeySaveDB` 落库运行时 Key 状态，避免随后的缓存重载把内存态（自动禁用/自动启用）回滚。
+- 存量/手动禁用的 Key 因 `AutoBanCount=0` 永远不会被扫描器自动启用。

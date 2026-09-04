@@ -31,6 +31,11 @@ export function CreateDialogContent() {
         retry_count: 3,
         key_load_balance_mode: DEFAULT_KEY_LOAD_BALANCE_MODE,
         auto_ban_key_failures: 0,
+        auto_enable_key: false,
+        auto_enable_strategy: 'fixed',
+        auto_enable_delay_min: 1440,
+        auto_enable_backoff_max_min: 43200,
+        auto_enable_daily_time: '00:00',
     });
     const t = useTranslations('channel.create');
 
@@ -69,6 +74,11 @@ export function CreateDialogContent() {
                 retry_count: formData.retry_count,
                 key_load_balance_mode: formData.key_load_balance_mode,
                 auto_ban_key_failures: formData.auto_ban_key_failures,
+                auto_enable_key: formData.auto_enable_key,
+                auto_enable_strategy: formData.auto_enable_strategy,
+                auto_enable_delay_min: formData.auto_enable_delay_min,
+                auto_enable_backoff_max_min: formData.auto_enable_backoff_max_min,
+                auto_enable_daily_time: formData.auto_enable_daily_time,
             },
             {
                 onSuccess: () => {
@@ -91,6 +101,11 @@ export function CreateDialogContent() {
                         retry_count: 3,
                         key_load_balance_mode: DEFAULT_KEY_LOAD_BALANCE_MODE,
                         auto_ban_key_failures: 0,
+                        auto_enable_key: false,
+                        auto_enable_strategy: 'fixed',
+                        auto_enable_delay_min: 1440,
+                        auto_enable_backoff_max_min: 43200,
+                        auto_enable_daily_time: '00:00',
                     });
                     setIsOpen(false);
                 }

@@ -44,6 +44,12 @@ type Channel struct {
 	RetryCount          int                   `json:"retry_count" gorm:"default:3"`
 	KeyLoadBalanceMode  string                `json:"key_load_balance_mode" gorm:"default:'failover'"`
 	AutoBanKeyFailures  int                   `json:"auto_ban_key_failures" gorm:"default:0"` // 0 means disabled
+	// 自动启用已禁用 Key 配置
+	AutoEnableKey           bool   `json:"auto_enable_key" gorm:"default:false"`
+	AutoEnableStrategy      string `json:"auto_enable_strategy" gorm:"default:'fixed'"`      // fixed / daily / backoff
+	AutoEnableDelayMin      int    `json:"auto_enable_delay_min" gorm:"default:1440"`        // 固定延迟/退避基础延迟（分钟）
+	AutoEnableBackoffMaxMin int    `json:"auto_enable_backoff_max_min" gorm:"default:43200"` // 退避上限（分钟）
+	AutoEnableDailyTime     string `json:"auto_enable_daily_time" gorm:"default:'00:00'"`    // 每日定点 HH:MM（00:00–23:59）
 }
 
 type BaseUrl struct {
@@ -65,6 +71,9 @@ type ChannelKey struct {
 	LastUseTimeStamp int64   `json:"last_use_time_stamp"`
 	TotalCost        float64 `json:"total_cost"`
 	Remark           string  `json:"remark"`
+	// 自动禁用计数（自动禁用时 +1，手动改 Key 状态时清零）
+	AutoBanCount int   `json:"auto_ban_count"` // 存量行默认 0，不参与扫描
+	DisabledAt   int64 `json:"disabled_at"`    // 最近一次自动禁用时刻（unix 秒）
 }
 
 // ChannelUpdateRequest 渠道更新请求 - 仅包含变更的数据
@@ -88,6 +97,12 @@ type ChannelUpdateRequest struct {
 	RetryCount          *int    `json:"retry_count,omitempty"`
 	KeyLoadBalanceMode  *string `json:"key_load_balance_mode,omitempty"`
 	AutoBanKeyFailures  *int    `json:"auto_ban_key_failures,omitempty"`
+
+	AutoEnableKey           *bool   `json:"auto_enable_key,omitempty"`
+	AutoEnableStrategy      *string `json:"auto_enable_strategy,omitempty"`
+	AutoEnableDelayMin      *int    `json:"auto_enable_delay_min,omitempty"`
+	AutoEnableBackoffMaxMin *int    `json:"auto_enable_backoff_max_min,omitempty"`
+	AutoEnableDailyTime     *string `json:"auto_enable_daily_time,omitempty"`
 
 	KeysToAdd    []ChannelKeyAddRequest    `json:"keys_to_add,omitempty"`
 	KeysToUpdate []ChannelKeyUpdateRequest `json:"keys_to_update,omitempty"`
@@ -171,6 +186,7 @@ func (c *Channel) GetChannelKey() ChannelKey {
 	return best
 }
 
+// NormalizeKeyLoadBalanceMode 归一化 Key 负载方式，未知/空值回退 failover。
 func NormalizeKeyLoadBalanceMode(mode string) string {
 	switch mode {
 	case KeyLoadBalanceModeFailover, KeyLoadBalanceModeRoundRobin, KeyLoadBalanceModeRandom:
@@ -178,6 +194,31 @@ func NormalizeKeyLoadBalanceMode(mode string) string {
 	default:
 		return KeyLoadBalanceModeFailover
 	}
+}
+
+// 自动启用策略常量
+const (
+	AutoEnableStrategyFixed   = "fixed"
+	AutoEnableStrategyDaily   = "daily"
+	AutoEnableStrategyBackoff = "backoff"
+)
+
+// NormalizeAutoEnableStrategy 归一化自动启用策略，未知/空值回退 fixed。
+func NormalizeAutoEnableStrategy(s string) string {
+	switch s {
+	case AutoEnableStrategyDaily, AutoEnableStrategyBackoff:
+		return s
+	default:
+		return AutoEnableStrategyFixed
+	}
+}
+
+// NormalizeAutoEnableDailyTime 归一化每日定点时刻：UI 语义 "24:00"（凌晨24点）存储转 "00:00"。
+func NormalizeAutoEnableDailyTime(s string) string {
+	if s == "24:00" {
+		return "00:00"
+	}
+	return s
 }
 
 func (c *Channel) GetCandidateKeys() []ChannelKey {

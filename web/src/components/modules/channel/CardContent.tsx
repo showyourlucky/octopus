@@ -64,6 +64,11 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
         retry_count: channel.retry_count,
         key_load_balance_mode: channel.key_load_balance_mode || DEFAULT_KEY_LOAD_BALANCE_MODE,
         auto_ban_key_failures: channel.auto_ban_key_failures,
+        auto_enable_key: channel.auto_enable_key,
+        auto_enable_strategy: channel.auto_enable_strategy || 'fixed',
+        auto_enable_delay_min: channel.auto_enable_delay_min ?? 1440,
+        auto_enable_backoff_max_min: channel.auto_enable_backoff_max_min ?? 43200,
+        auto_enable_daily_time: channel.auto_enable_daily_time || '00:00',
     });
     const t = useTranslations('channel.detail');
     const [page, setPage] = useState(1);
@@ -107,7 +112,11 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
         if (formData.retry_count !== channel.retry_count) req.retry_count = formData.retry_count;
         if (formData.key_load_balance_mode !== channel.key_load_balance_mode) req.key_load_balance_mode = formData.key_load_balance_mode;
         if (formData.auto_ban_key_failures !== channel.auto_ban_key_failures) req.auto_ban_key_failures = formData.auto_ban_key_failures;
-
+        if (formData.auto_enable_key !== channel.auto_enable_key) req.auto_enable_key = formData.auto_enable_key;
+        if (formData.auto_enable_strategy !== channel.auto_enable_strategy) req.auto_enable_strategy = formData.auto_enable_strategy;
+        if (formData.auto_enable_delay_min !== channel.auto_enable_delay_min) req.auto_enable_delay_min = formData.auto_enable_delay_min;
+        if (formData.auto_enable_backoff_max_min !== channel.auto_enable_backoff_max_min) req.auto_enable_backoff_max_min = formData.auto_enable_backoff_max_min;
+        if (formData.auto_enable_daily_time !== channel.auto_enable_daily_time) req.auto_enable_daily_time = formData.auto_enable_daily_time;
         if (!headersEqual(formData.custom_header, channel.custom_header)) {
             req.custom_header = (formData.custom_header ?? [])
                 .map((h) => ({ header_key: h.header_key.trim(), header_value: h.header_value }))
