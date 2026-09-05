@@ -8,6 +8,13 @@
 - 不要用真实 Key 内容或后四位作为主要识别方式，避免泄露敏感信息；备注用于人类可读名称，Key ID 用于精确定位。
 - 编辑弹框使用 `md:max-w-3xl`，Key 行桌面端使用 `md:flex-nowrap`，避免加入 Key ID 标签后删除按钮被挤到下一行；移动端仍允许换行保证可用。
 
+## 渠道详情弹层性能
+
+- 点击卡片打开详情时不要用 animate-ui `Tabs` 做查看/编辑切换：`TabsContents` 会同时挂载两个 pane，打开瞬间就会 mount 整份 `ChannelForm`，再叠加 `height` spring 和 `filter: blur()`，会把 `MorphingDialog` 的共享布局动画卡死。
+- 查看/编辑用 `isEditing` 条件渲染；`ChannelForm` 只在点「编辑」后挂载。`formData` 仍放在 `CardContent`，取消编辑再进入时保留未保存改动。
+- `MorphingDialogDescription` 必须 `disableLayoutAnimation`：只让卡片外壳参与 `layoutId` 变形，统计和 Key 列表不要参与共享布局测量。
+- 详情弹层定高（`h-[min(90vh,52rem)] flex flex-col overflow-hidden`），标题 `shrink-0`，内容区内部滚动；查看态底部「编辑 / 删除」贴在弹层底部，不要再给内容套 `max-h-[60vh]`。
+
 ## Key 负载方式说明
 
 - 新建渠道默认 `key_load_balance_mode` 为 `failover`，不要再把前端默认值改回 `round_robin`。

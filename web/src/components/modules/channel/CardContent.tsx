@@ -20,7 +20,6 @@ import {
     MorphingDialogClose,
     useMorphingDialog,
 } from '@/components/ui/morphing-dialog';
-import { Tabs, TabsContents, TabsContent } from '@/components/animate-ui/primitives/animate/tabs';
 import { type StatsMetricsFormatted } from '@/api/endpoints/stats';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
@@ -82,7 +81,6 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
     
     const totalPages = Math.ceil((channel.keys?.length || 0) / pageSize);
 
-    const currentView = isEditing ? 'editing' : 'viewing';
 
     const baseUrlsEqual = (a: Channel['base_urls'] | undefined, b: Channel['base_urls'] | undefined) =>
         JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
@@ -193,7 +191,7 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
 
     return (
         <>
-            <MorphingDialogTitle>
+            <MorphingDialogTitle className="shrink-0">
                 <header className="mb-6 flex items-center justify-between">
                     <h2 className="text-2xl font-bold text-card-foreground">
                         {isEditing ? t('title.edit') : t('title.view')}
@@ -209,11 +207,25 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
                 </header>
             </MorphingDialogTitle>
 
-            <MorphingDialogDescription>
-                <Tabs value={currentView}>
-                    <TabsContents>
-                        <TabsContent value="viewing" >
-                            <div className="max-h-[60vh] overflow-y-auto space-y-4 sm:space-y-5">
+            <MorphingDialogDescription disableLayoutAnimation className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                {isEditing ? (
+                    <div className="min-h-0 flex-1 overflow-y-auto">
+                        <ChannelForm
+                            formData={formData}
+                            onFormDataChange={setFormData}
+                            onSubmit={handleUpdate}
+                            isPending={updateChannel.isPending}
+                            submitText={t('actions.save')}
+                            pendingText={t('actions.saving')}
+                            onCancel={() => setIsEditing(false)}
+                            cancelText={t('actions.cancel')}
+                            idPrefix="channel"
+                            channelId={channel.id}
+                        />
+                    </div>
+                ) : (
+                    <>
+                            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto sm:space-y-5">
                                 <dl className="grid gap-3 grid-cols-1 sm:grid-cols-3">
                                     <div className="rounded-2xl border bg-linear-to-br from-chart-1/10 to-chart-1/5 p-3 sm:p-4">
                                         <dt className="flex items-center gap-2 mb-2 text-xs font-medium text-muted-foreground">
@@ -486,7 +498,7 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
                             </div>
 
                             {/* 操作按钮 */}
-                            <div className="grid gap-3 sm:grid-cols-2 pt-2">
+                            <div className="grid shrink-0 gap-3 sm:grid-cols-2 pt-2">
                                 <Button
                                     onClick={() => (isConfirmingDelete ? setIsConfirmingDelete(false) : setIsEditing(true))}
                                     variant={isConfirmingDelete ? 'secondary' : 'default'}
@@ -508,24 +520,8 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
                                             : t('actions.delete')}
                                 </Button>
                             </div>
-                        </TabsContent>
-
-                        <TabsContent value="editing">
-                            <ChannelForm
-                                formData={formData}
-                                onFormDataChange={setFormData}
-                                onSubmit={handleUpdate}
-                                isPending={updateChannel.isPending}
-                                submitText={t('actions.save')}
-                                pendingText={t('actions.saving')}
-                                onCancel={() => setIsEditing(false)}
-                                cancelText={t('actions.cancel')}
-                                idPrefix="channel"
-                                channelId={channel.id}
-                            />
-                        </TabsContent>
-                    </TabsContents>
-                </Tabs>
+                    </>
+                )}
             </MorphingDialogDescription>
         </>
     );
