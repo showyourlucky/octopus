@@ -120,7 +120,9 @@ type InternalLLMRequest struct {
 	// Used by OpenAI to cache responses for similar requests to optimize your cache
 	// hit rates. Replaces the `user` field.
 	// [Learn more](https://platform.openai.com/docs/guides/prompt-caching).
-	PromptCacheKey *bool `json:"prompt_cache_key,omitzero"`
+	// 注意：该字段在 OpenAI 官方协议中是字符串（用于把相同前缀的请求归入同一缓存桶），
+	// 早期误声明为 *bool 会导致客户端传入合法字符串时反序列化失败，请勿改回 bool。
+	PromptCacheKey *string `json:"prompt_cache_key,omitzero"`
 
 	// A stable identifier used to help detect users of your application that may be
 	// violating OpenAI's usage policies. The IDs should be a string that uniquely

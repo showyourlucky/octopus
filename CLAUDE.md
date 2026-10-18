@@ -45,3 +45,8 @@
 - `all_channel` 类型允许 `/v1/models` 返回分组模型与启用渠道配置模型的去重集合；禁用渠道模型不能出现在 API Key 可见列表或白名单候选中，请求时仍优先匹配真实分组。
 - `supported_models` 继续作为白名单：为空表示当前访问类型范围内不限制，非空时模型列表和请求都必须过滤。
 - 分组外模型只在 `all_channel` 类型下按模型名精确匹配启用渠道，不自动写入分组，也不改变分组页面数据结构。
+
+## 入站请求解析与字段类型
+
+- `InternalLLMRequest.PromptCacheKey` 必须是 `*string`（OpenAI 协议中它是缓存分桶用的字符串标识），曾误写为 `*bool`，导致客户端传入字符串时反序列化报 `json: cannot unmarshal string into Go struct field InternalLLMRequest.prompt_cache_key of type bool`。新增字段时先对照上游协议确认类型。
+- `parseRequest` 中入站 body 解析失败返回 `400`（调用方错误），不要返回 `500`，避免把客户端协议不兼容误报成服务端故障。

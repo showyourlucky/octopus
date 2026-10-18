@@ -311,7 +311,9 @@ func parseRequest(inboundType inbound.InboundType, c *gin.Context) (*model.Inter
 	inAdapter := inbound.Get(inboundType)
 	internalRequest, err := inAdapter.TransformRequest(c.Request.Context(), body)
 	if err != nil {
-		resp.Error(c, http.StatusInternalServerError, err.Error())
+		// 入站请求体解析失败属于调用方错误（例如字段类型不符合协议），返回 400 而非 500，
+		// 避免把客户端问题误报成服务端内部错误，干扰排障。
+		resp.Error(c, http.StatusBadRequest, err.Error())
 		return nil, nil, err
 	}
 
