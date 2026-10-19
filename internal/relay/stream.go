@@ -27,7 +27,8 @@ import (
 )
 
 // sendStreamRequest 发送流式请求，返回原始 SSE 事件流。
-// >=400 状态码由 DoStream 直接返回 *httpclient.Error（含 body）。
+// >=400 状态码由 DoStream 直接返回 *httpclient.Error（含 body）；
+// 同非流式一样把 body 拼进错误信息，避免上游原话丢失。
 func (ra *relayAttempt) sendStreamRequest(ctx context.Context, hcReq *httpclient.Request) (streams.Stream[*httpclient.StreamEvent], error) {
 	stdClient, err := helper.ChannelHttpClient(ra.channel)
 	if err != nil {
@@ -35,7 +36,15 @@ func (ra *relayAttempt) sendStreamRequest(ctx context.Context, hcReq *httpclient
 		return nil, err
 	}
 	hc := httpclient.NewHttpClientWithClient(stdClient)
-	return hc.DoStream(ctx, hcReq)
+	events, err := hc.DoStream(ctx, hcReq)
+	if err != nil {
+		var hcErr *httpclient.Error
+		if errors.As(err, &hcErr) {
+			return nil, fmt.Errorf("%w | upstream body: %s", hcErr, truncateUpstreamBody(hcErr.Body))
+		}
+		return nil, err
+	}
+	return events, nil
 }
 
 // handleStreamResponse 处理流式响应。

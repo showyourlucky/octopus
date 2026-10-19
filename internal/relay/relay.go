@@ -425,16 +425,34 @@ func (ra *relayAttempt) sendRequest(ctx context.Context, hcReq *httpclient.Reque
 	hcResp, err := hc.Do(ctx, hcReq)
 	if err != nil {
 		// hc.Do 对 >=400 状态码返回 *httpclient.Error（含状态码与 body），
-		// 调用方按 ResponseError 语义处理，支持重试判定。
+		// 但它的 Error() 不带 body；这里把上游原话截断拼进错误信息，
+		// 否则日志/RelayLog 里永远看不到上游为什么拒绝（老代码是拼 body 的）。
+		// %w 保留错误链，下游 errors.As 还能拿到 *httpclient.Error。
 		var hcErr *httpclient.Error
 		if errors.As(err, &hcErr) {
-			return nil, hcErr
+			return nil, fmt.Errorf("%w | upstream body: %s", hcErr, truncateUpstreamBody(hcErr.Body))
 		}
 		log.Warnf("failed to send request: %v", err)
 		return nil, err
 	}
 
 	return hcResp, nil
+}
+
+// truncateUpstreamBody 把上游错误 body 截断成适合进日志/DB 的片段。
+func truncateUpstreamBody(body []byte, limit ...int) string {
+	maxLen := 2000
+	if len(limit) > 0 && limit[0] > 0 {
+		maxLen = limit[0]
+	}
+	s := strings.TrimSpace(string(body))
+	if s == "" {
+		return "(empty)"
+	}
+	if len(s) > maxLen {
+		s = s[:maxLen] + "...(truncated)"
+	}
+	return s
 }
 
 func paramOverrideValue(ptr *string) string {
