@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"strconv"
 	"sync"
 	"time"
 
@@ -285,8 +286,11 @@ func applyRelayLogFilterQuery(query *gorm.DB, filter *model.RelayLogListFilter) 
 			query = query.Where("total_attempts <= ?", 1)
 		}
 	}
-	if filter.Channel != nil && *filter.Channel != "" {
-		query = query.Where("channel_name = ? OR attempts LIKE ?", *filter.Channel, "%\"channel_name\":\""+*filter.Channel+"\"%")
+	if filter.ChannelID != nil {
+		// 顶层 channel_id 命中，或任一 attempt 经过该渠道（attempts 是 JSON 数组，
+		// 按 `"channel_id":<id>,` 匹配；channel_id 后必有逗号，不会把 1 误匹配到 11）。
+		query = query.Where("channel_id = ? OR attempts LIKE ?",
+			*filter.ChannelID, "%\"channel_id\":"+strconv.Itoa(*filter.ChannelID)+",%")
 	}
 	return query
 }
@@ -307,12 +311,12 @@ func relayLogMatchFilter(log model.RelayLog, filter *model.RelayLogListFilter) b
 			return false
 		}
 	}
-	if filter.Channel != nil && *filter.Channel != "" {
-		if log.ChannelName == *filter.Channel {
+	if filter.ChannelID != nil {
+		if log.ChannelId == *filter.ChannelID {
 			return true
 		}
 		for _, attempt := range log.Attempts {
-			if attempt.ChannelName == *filter.Channel {
+			if attempt.ChannelID == *filter.ChannelID {
 				return true
 			}
 		}

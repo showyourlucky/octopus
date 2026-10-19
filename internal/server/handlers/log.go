@@ -139,10 +139,10 @@ func streamLog(c *gin.Context) {
 func parseRelayLogFilter(c *gin.Context) (*model.RelayLogListFilter, error) {
 	group := strings.TrimSpace(c.Query("group"))
 	modelName := strings.TrimSpace(c.Query("model"))
-	channel := strings.TrimSpace(c.Query("channel"))
+	channelIDStr := strings.TrimSpace(c.Query("channel_id"))
 	retriedStr := strings.TrimSpace(c.Query("retried"))
 
-	if group == "" && modelName == "" && channel == "" && retriedStr == "" {
+	if group == "" && modelName == "" && channelIDStr == "" && retriedStr == "" {
 		return nil, nil
 	}
 
@@ -153,8 +153,12 @@ func parseRelayLogFilter(c *gin.Context) (*model.RelayLogListFilter, error) {
 	if modelName != "" {
 		filter.Model = &modelName
 	}
-	if channel != "" {
-		filter.Channel = &channel
+	if channelIDStr != "" {
+		channelID, err := strconv.Atoi(channelIDStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid channel_id value")
+		}
+		filter.ChannelID = &channelID
 	}
 	if retriedStr != "" {
 		retried, err := strconv.ParseBool(retriedStr)

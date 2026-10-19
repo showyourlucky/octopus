@@ -45,8 +45,8 @@ type RelayLog struct {
 }
 
 type RelayLogListFilter struct {
-	Group   *string `json:"group,omitempty"`
-	Model   *string `json:"model,omitempty"`
-	Retried *bool   `json:"retried,omitempty"`
-	Channel *string `json:"channel,omitempty"`
+	Group     *string `json:"group,omitempty"`
+	Model     *string `json:"model,omitempty"`
+	Retried   *bool   `json:"retried,omitempty"`
+	ChannelID *int    `json:"channel_id,omitempty"` // 按渠道 ID 筛选（渠道改名不影响历史日志关联）
 }

@@ -133,7 +133,7 @@ export function Log() {
             group: selectedGroup === 'all' ? '' : selectedGroup,
             model: selectedModel === 'all' ? '' : selectedModel,
             retried: selectedRetried,
-            channel: selectedChannel === 'all' ? '' : selectedChannel,
+            channel_id: selectedChannel === 'all' ? '' : selectedChannel,
         },
     });
 
@@ -165,13 +165,17 @@ export function Log() {
     }, [models, selectedModel]);
 
     const channelOptions = useMemo(() => {
-        const names = channels
-            .map((channel) => channel.raw.name?.trim())
-            .filter((name): name is string => !!name);
-        if (selectedChannel !== 'all') {
-            names.push(selectedChannel);
+        // value 用渠道 ID（改名不影响筛选），label 显示名称
+        const options = channels
+            .map((channel) => ({
+                value: String(channel.raw.id),
+                label: channel.raw.name?.trim() || `Channel ${channel.raw.id}`,
+            }))
+            .filter((opt) => !!opt.label);
+        if (selectedChannel !== 'all' && !options.some((opt) => opt.value === selectedChannel)) {
+            options.push({ value: selectedChannel, label: `Channel ${selectedChannel}` });
         }
-        return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
+        return options.sort((a, b) => a.label.localeCompare(b.label));
     }, [channels, selectedChannel]);
 
     const retriedOptions = useMemo<FilterOption[]>(() => [
@@ -242,7 +246,7 @@ export function Log() {
                 <SearchableFilterSelect
                     value={selectedChannel}
                     onValueChange={setSelectedChannel}
-                    options={channelOptions.map((channel) => ({ value: channel, label: channel }))}
+                    options={channelOptions}
                     allLabel={t('filter.allChannels')}
                     placeholder={t('filter.channel')}
                     searchPlaceholder={t('filter.searchPlaceholder')}

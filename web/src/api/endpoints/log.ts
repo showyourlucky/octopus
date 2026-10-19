@@ -52,7 +52,7 @@ export interface LogFilters {
     group?: string;
     model?: string;
     retried?: 'all' | 'yes' | 'no';
-    channel?: string;
+    channel_id?: string;
 }
 
 /**
@@ -66,7 +66,7 @@ export interface LogListParams {
     group?: string;
     model?: string;
     retried?: boolean;
-    channel?: string;
+    channel_id?: string;
 }
 
 /**
@@ -94,11 +94,11 @@ export function useClearLogs() {
     });
 }
 
-function hasActiveFilter(filters: { group: string; model: string; retried: 'all' | 'yes' | 'no'; channel: string }): boolean {
-    return Boolean(filters.group || filters.model || filters.channel || filters.retried !== 'all');
+function hasActiveFilter(filters: { group: string; model: string; retried: 'all' | 'yes' | 'no'; channel_id: string }): boolean {
+    return Boolean(filters.group || filters.model || filters.channel_id || filters.retried !== 'all');
 }
 
-function matchLogFilter(log: RelayLog, filters: { group: string; model: string; retried: 'all' | 'yes' | 'no'; channel: string }): boolean {
+function matchLogFilter(log: RelayLog, filters: { group: string; model: string; retried: 'all' | 'yes' | 'no'; channel_id: string }): boolean {
     if (filters.group && log.request_model_name !== filters.group) {
         return false;
     }
@@ -116,10 +116,11 @@ function matchLogFilter(log: RelayLog, filters: { group: string; model: string; 
         }
     }
 
-    if (filters.channel) {
+    if (filters.channel_id) {
+        const channelId = Number(filters.channel_id);
         const channelMatched =
-            log.channel_name === filters.channel ||
-            !!log.attempts?.some((attempt) => attempt.channel_name === filters.channel);
+            log.channel === channelId ||
+            !!log.attempts?.some((attempt) => attempt.channel_id === channelId);
         if (!channelMatched) {
             return false;
         }
@@ -130,8 +131,8 @@ function matchLogFilter(log: RelayLog, filters: { group: string; model: string; 
 
 const logsInfiniteQueryKey = (
     pageSize: number,
-    filters: { group: string; model: string; retried: 'all' | 'yes' | 'no'; channel: string }
-) => ['logs', 'infinite', pageSize, filters.group, filters.model, filters.retried, filters.channel] as const;
+    filters: { group: string; model: string; retried: 'all' | 'yes' | 'no'; channel_id: string }
+) => ['logs', 'infinite', pageSize, filters.group, filters.model, filters.retried, filters.channel_id] as const;
 
 /**
  * 日志管理 Hook
@@ -152,13 +153,13 @@ export function useLogs(options: { pageSize?: number; filters?: LogFilters } = {
     const groupFilter = (filters?.group ?? '').trim();
     const modelFilter = (filters?.model ?? '').trim();
     const retriedFilter = filters?.retried ?? 'all';
-    const channelFilter = (filters?.channel ?? '').trim();
+    const channelFilter = (filters?.channel_id ?? '').trim();
 
     const currentFilters = useMemo(() => ({
         group: groupFilter,
         model: modelFilter,
         retried: retriedFilter,
-        channel: channelFilter,
+        channel_id: channelFilter,
     }), [groupFilter, modelFilter, retriedFilter, channelFilter]);
 
     const queryKey = useMemo(() => logsInfiniteQueryKey(pageSize, currentFilters), [pageSize, currentFilters]);
@@ -183,8 +184,8 @@ export function useLogs(options: { pageSize?: number; filters?: LogFilters } = {
             if (currentFilters.model) {
                 params.set('model', currentFilters.model);
             }
-            if (currentFilters.channel) {
-                params.set('channel', currentFilters.channel);
+            if (currentFilters.channel_id) {
+                params.set('channel_id', currentFilters.channel_id);
             }
             if (currentFilters.retried !== 'all') {
                 params.set('retried', currentFilters.retried === 'yes' ? 'true' : 'false');
