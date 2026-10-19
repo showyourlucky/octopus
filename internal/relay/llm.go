@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"sync"
 
 	dbmodel "github.com/bestruirui/octopus/internal/model"
 	"github.com/gin-gonic/gin"
@@ -57,49 +56,27 @@ func getInbound(t InboundType) transformer.Inbound {
 	}
 }
 
-// outboundCacheKey 出站 transformer 缓存键。
-// transformer 在构造时固化 baseURL 与 key（经 Config 注入），
-// 多端点/多 Key 场景下每个组合一个实例。
-type outboundCacheKey struct {
-	typ     dbmodel.OutboundType
-	baseURL string
-	apiKey  string
-}
-
-var outboundCache sync.Map // map[outboundCacheKey]transformer.Outbound
-
-// getOutbound 按渠道类型构造（或取缓存）axonhub outbound transformer。
+// getOutbound 按渠道类型构造 axonhub outbound transformer。
+// 注意：每次调用都重新构造，不做缓存。transformer 在构造时固化 baseURL 与 key；
+// 若缓存实例，管理后台修改渠道 base_url / 轮换 Key 后，relay 会继续用旧配置直到进程重启。
+// 构造开销极小（struct 初始化 + URL 校验），老代码也是按次传参，无需缓存。
 func getOutbound(typ dbmodel.OutboundType, baseURL, apiKey string) (transformer.Outbound, error) {
-	key := outboundCacheKey{typ: typ, baseURL: baseURL, apiKey: apiKey}
-	if v, ok := outboundCache.Load(key); ok {
-		return v.(transformer.Outbound), nil
-	}
-
-	var (
-		out transformer.Outbound
-		err error
-	)
 	switch typ {
 	case dbmodel.OutboundTypeOpenAIChat, dbmodel.OutboundTypeOpenAIEmbedding:
 		// openai outbound 按 llm.RequestType 路由，chat 与 embedding 共用。
-		out, err = openai.NewOutboundTransformer(baseURL, apiKey)
+		return openai.NewOutboundTransformer(baseURL, apiKey)
 	case dbmodel.OutboundTypeOpenAIResponse:
-		out, err = responses.NewOutboundTransformer(baseURL, apiKey)
+		return responses.NewOutboundTransformer(baseURL, apiKey)
 	case dbmodel.OutboundTypeAnthropic:
-		out, err = anthropic.NewOutboundTransformer(baseURL, apiKey)
+		return anthropic.NewOutboundTransformer(baseURL, apiKey)
 	case dbmodel.OutboundTypeGemini:
-		out, err = gemini.NewOutboundTransformer(baseURL, apiKey)
+		return gemini.NewOutboundTransformer(baseURL, apiKey)
 	case dbmodel.OutboundTypeVolcengine:
 		// fork 的 volcengine 实际打 doubao-seed-*，对应 axonhub 的 doubao transformer。
-		out, err = doubao.NewOutboundTransformer(baseURL, apiKey)
+		return doubao.NewOutboundTransformer(baseURL, apiKey)
 	default:
 		return nil, fmt.Errorf("unsupported channel type: %d", typ)
 	}
-	if err != nil {
-		return nil, err
-	}
-	outboundCache.Store(key, out)
-	return out, nil
 }
 
 // toHTTPClientRequest 把 gin 入站请求包成 axonhub inbound 吃的 httpclient.Request。
