@@ -101,13 +101,14 @@ func (ra *relayAttempt) handleStreamResponse(ctx context.Context, hcReq *httpcli
 	}
 
 	flushPending := func() {
+		if len(pendingChunks) == 0 {
+			return
+		}
 		for _, p := range pendingChunks {
 			_, _ = ra.c.Writer.Write(p)
 		}
 		pendingChunks = nil
-		if len(pendingChunks) == 0 {
-			ra.c.Writer.Flush()
-		}
+		ra.c.Writer.Flush()
 	}
 
 	for {
