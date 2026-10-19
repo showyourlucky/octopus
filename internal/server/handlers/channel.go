@@ -15,7 +15,6 @@ import (
 	"github.com/bestruirui/octopus/internal/server/resp"
 	"github.com/bestruirui/octopus/internal/server/router"
 	"github.com/bestruirui/octopus/internal/task"
-	"github.com/bestruirui/octopus/internal/transformer/outbound"
 	"github.com/gin-gonic/gin"
 )
 
@@ -195,7 +194,7 @@ func testChannelModel(c *gin.Context) {
 		resp.Error(c, http.StatusBadRequest, "渠道未启用，无法发起测试")
 		return
 	}
-	if !outbound.IsChatChannelType(channel.Type) {
+	if !model.IsChatChannelType(channel.Type) {
 		resp.Error(c, http.StatusBadRequest, "当前第一版仅支持 Chat 类渠道测试")
 		return
 	}

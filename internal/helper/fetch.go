@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/bestruirui/octopus/internal/model"
-	"github.com/bestruirui/octopus/internal/transformer/outbound"
 	"github.com/dlclark/regexp2"
 )
 
@@ -18,9 +17,9 @@ func FetchModels(ctx context.Context, request model.Channel) ([]string, error) {
 	}
 	fetchModel := make([]string, 0)
 	switch request.Type {
-	case outbound.OutboundTypeAnthropic:
+	case model.OutboundTypeAnthropic:
 		fetchModel, err = fetchAnthropicModels(client, ctx, request)
-	case outbound.OutboundTypeGemini:
+	case model.OutboundTypeGemini:
 		fetchModel, err = fetchGeminiModels(client, ctx, request)
 	default:
 		fetchModel, err = fetchOpenAIModels(client, ctx, request)

@@ -23,7 +23,6 @@ import (
 	"github.com/bestruirui/octopus/internal/relay/balancer"
 	"github.com/bestruirui/octopus/internal/relay/bodycache"
 	"github.com/bestruirui/octopus/internal/server/resp"
-	"github.com/bestruirui/octopus/internal/transformer/outbound"
 	"github.com/bestruirui/octopus/internal/utils/log"
 	"github.com/gin-gonic/gin"
 )
@@ -151,7 +150,7 @@ func ImagesHandler(endpoint string, c *gin.Context) {
 		}
 
 		// channel.Type 限制：仅 OpenAI Chat/Responses
-		if channel.Type != outbound.OutboundTypeOpenAIChat && channel.Type != outbound.OutboundTypeOpenAIResponse {
+		if channel.Type != model.OutboundTypeOpenAIChat && channel.Type != model.OutboundTypeOpenAIResponse {
 			iter.Skip(channel.ID, 0, channel.Name, "", fmt.Sprintf("unsupported channel type: %d", channel.Type))
 			continue
 		}

@@ -6,7 +6,6 @@ import (
 	"github.com/bestruirui/octopus/internal/relay"
 	"github.com/bestruirui/octopus/internal/server/middleware"
 	"github.com/bestruirui/octopus/internal/server/router"
-	"github.com/bestruirui/octopus/internal/transformer/inbound"
 	"github.com/gin-gonic/gin"
 )
 
@@ -33,14 +32,14 @@ func init() {
 }
 
 func chat(c *gin.Context) {
-	relay.Handler(inbound.InboundTypeOpenAIChat, c)
+	relay.Handler(relay.InboundTypeOpenAIChat, c)
 }
 func response(c *gin.Context) {
-	relay.Handler(inbound.InboundTypeOpenAIResponse, c)
+	relay.Handler(relay.InboundTypeOpenAIResponse, c)
 }
 func message(c *gin.Context) {
-	relay.Handler(inbound.InboundTypeAnthropic, c)
+	relay.Handler(relay.InboundTypeAnthropic, c)
 }
 func embedding(c *gin.Context) {
-	relay.Handler(inbound.InboundTypeOpenAIEmbedding, c)
+	relay.Handler(relay.InboundTypeOpenAIEmbedding, c)
 }

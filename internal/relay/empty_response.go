@@ -1,16 +1,12 @@
 package relay
 
-import transformerModel "github.com/bestruirui/octopus/internal/transformer/model"
+import "github.com/looplj/axonhub/llm"
 
 // hasStreamResponseContent 判断统一流式响应中是否已经包含对客户端有意义的内容。
 // 注意：仅 role、空 choices、usage、finish_reason 等元数据不算有效回复。
-func hasStreamResponseContent(resp *transformerModel.InternalLLMResponse) bool {
+func hasStreamResponseContent(resp *llm.Response) bool {
 	if resp == nil {
 		return false
-	}
-
-	if len(resp.EmbeddingData) > 0 {
-		return true
 	}
 
 	for _, choice := range resp.Choices {
@@ -23,7 +19,7 @@ func hasStreamResponseContent(resp *transformerModel.InternalLLMResponse) bool {
 }
 
 // hasMessageContent 判断消息体是否包含可交付给客户端的有效内容。
-func hasMessageContent(msg *transformerModel.Message) bool {
+func hasMessageContent(msg *llm.Message) bool {
 	if msg == nil {
 		return false
 	}
@@ -37,16 +33,10 @@ func hasMessageContent(msg *transformerModel.Message) bool {
 	if len(msg.ToolCalls) > 0 {
 		return true
 	}
-	if len(msg.Images) > 0 {
-		return true
-	}
-	if msg.GetReasoningContent() != "" {
+	if msg.ReasoningContent != nil && *msg.ReasoningContent != "" {
 		return true
 	}
 	if msg.Refusal != "" {
-		return true
-	}
-	if msg.Audio != nil && (msg.Audio.Data != "" || msg.Audio.ID != "" || msg.Audio.Transcript != "") {
 		return true
 	}
 

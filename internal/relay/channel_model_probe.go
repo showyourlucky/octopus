@@ -7,9 +7,9 @@ import (
 
 	dbmodel "github.com/bestruirui/octopus/internal/model"
 	"github.com/bestruirui/octopus/internal/relay/balancer"
-	"github.com/bestruirui/octopus/internal/transformer/inbound"
-	transformerModel "github.com/bestruirui/octopus/internal/transformer/model"
 	"github.com/gin-gonic/gin"
+
+	"github.com/looplj/axonhub/llm"
 )
 
 const channelModelProbeAPIKeyName = "渠道测试"
@@ -32,23 +32,21 @@ type ChannelModelProbeResult struct {
 func ProbeChannelModel(c *gin.Context, channel dbmodel.Channel, modelName string, keyID *int) (*ChannelModelProbeResult, error) {
 	content := "1+78=?"
 	stream := false
-	internalRequest := &transformerModel.InternalLLMRequest{
+	llmReq := &llm.Request{
 		Model:  modelName,
 		Stream: &stream,
-		Messages: []transformerModel.Message{
+		Messages: []llm.Message{
 			{
-				Role: "user",
-				Content: transformerModel.MessageContent{
-					Content: &content,
-				},
+				Role:    "user",
+				Content: llm.MessageContent{Content: &content},
 			},
 		},
 	}
-	if err := internalRequest.Validate(); err != nil {
+	if err := validateLLMRequest(llmReq); err != nil {
 		return nil, fmt.Errorf("测试请求构造失败: %w", err)
 	}
 
-	inAdapter := inbound.Get(inbound.InboundTypeOpenAIChat)
+	inAdapter := getInbound(InboundTypeOpenAIChat)
 	if inAdapter == nil {
 		return nil, fmt.Errorf("Chat 入站适配器不可用")
 	}
@@ -63,19 +61,19 @@ func ProbeChannelModel(c *gin.Context, channel dbmodel.Channel, modelName string
 		},
 	}
 	iter := balancer.NewIterator(group, 0, modelName)
-	metrics := NewRelayMetrics(0, modelName, internalRequest)
+	metrics := NewRelayMetrics(0, modelName, llmReq)
 	metrics.SkipAPIKeyStats = true
 	metrics.RequestAPIKeyName = channelModelProbeAPIKeyName
 
 	start := time.Now()
 	req := &relayRequest{
-		c:                c,
-		inAdapter:        inAdapter,
-		internalRequest:  internalRequest,
-		metrics:          metrics,
-		requestModel:     modelName,
-		group:            group,
-		iter:             iter,
+		c:            c,
+		inAdapter:    inAdapter,
+		llmRequest:   llmReq,
+		metrics:      metrics,
+		requestModel: modelName,
+		group:        group,
+		iter:         iter,
 		suppressResponse: true,
 		skipSticky:       true,
 		// 透传到 executeRelay：非 nil 时锁定单 Key、强制 maxAttempts=1，绕过多 Key 重试。

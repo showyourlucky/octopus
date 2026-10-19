@@ -11,8 +11,9 @@ import (
 	"github.com/bestruirui/octopus/internal/model"
 	"github.com/bestruirui/octopus/internal/op"
 	"github.com/bestruirui/octopus/internal/price"
-	transformerModel "github.com/bestruirui/octopus/internal/transformer/model"
 	"github.com/bestruirui/octopus/internal/utils/log"
+
+	"github.com/looplj/axonhub/llm"
 )
 
 // RelayMetrics 负责最终的日志收集与持久化
@@ -24,9 +25,9 @@ type RelayMetrics struct {
 	// 首 Token 时间
 	FirstTokenTime time.Time
 
-	// 请求和响应内容
-	InternalRequest  *transformerModel.InternalLLMRequest
-	InternalResponse *transformerModel.InternalLLMResponse
+	// 请求和响应内容（axonhub/llm 统一模型）
+	LLMRequest  *llm.Request
+	LLMResponse *llm.Response
 
 	// 统计指标
 	ActualModel string
@@ -40,12 +41,12 @@ type RelayMetrics struct {
 	RequestAPIKeyName string
 }
 
-func NewRelayMetrics(apiKeyID int, requestModel string, req *transformerModel.InternalLLMRequest) *RelayMetrics {
+func NewRelayMetrics(apiKeyID int, requestModel string, req *llm.Request) *RelayMetrics {
 	return &RelayMetrics{
-		APIKeyID:        apiKeyID,
-		RequestModel:    requestModel,
-		StartTime:       time.Now(),
-		InternalRequest: req,
+		APIKeyID:     apiKeyID,
+		RequestModel: requestModel,
+		StartTime:    time.Now(),
+		LLMRequest:   req,
 	}
 }
 
@@ -53,8 +54,9 @@ func (m *RelayMetrics) SetFirstTokenTime(t time.Time) {
 	m.FirstTokenTime = t
 }
 
-func (m *RelayMetrics) SetInternalResponse(resp *transformerModel.InternalLLMResponse, actualModel string) {
-	m.InternalResponse = resp
+// SetLLMResponse 设置统一响应并计算 token 与费用。
+func (m *RelayMetrics) SetLLMResponse(resp *llm.Response, actualModel string) {
+	m.LLMResponse = resp
 	m.ActualModel = actualModel
 
 	if resp == nil || resp.Usage == nil {
@@ -70,16 +72,19 @@ func (m *RelayMetrics) SetInternalResponse(resp *transformerModel.InternalLLMRes
 		return
 	}
 	if usage.PromptTokensDetails == nil {
-		usage.PromptTokensDetails = &transformerModel.PromptTokensDetails{
+		usage.PromptTokensDetails = &llm.PromptTokensDetails{
 			CachedTokens: 0,
 		}
 	}
-	if usage.AnthropicUsage {
-		m.Stats.InputCost = (float64(usage.PromptTokensDetails.CachedTokens)*modelPrice.CacheRead +
+	// anthropic 风格按写入缓存单独计费：WriteCached* 有值即视为 anthropic 计费口径。
+	details := usage.PromptTokensDetails
+	writeCached := details.WriteCachedTokens + details.WriteCached5MinTokens + details.WriteCached1HourTokens
+	if writeCached > 0 {
+		m.Stats.InputCost = (float64(details.CachedTokens)*modelPrice.CacheRead +
 			float64(usage.PromptTokens)*modelPrice.Input +
-			float64(usage.CacheCreationInputTokens)*modelPrice.CacheWrite) * 1e-6
+			float64(writeCached)*modelPrice.CacheWrite) * 1e-6
 	} else {
-		m.Stats.InputCost = (float64(usage.PromptTokensDetails.CachedTokens)*modelPrice.CacheRead + float64(usage.PromptTokens-usage.PromptTokensDetails.CachedTokens)*modelPrice.Input) * 1e-6
+		m.Stats.InputCost = (float64(details.CachedTokens)*modelPrice.CacheRead + float64(usage.PromptTokens-details.CachedTokens)*modelPrice.Input) * 1e-6
 	}
 	m.Stats.OutputCost = float64(usage.CompletionTokens) * modelPrice.Output * 1e-6
 }
@@ -163,15 +168,15 @@ func (m *RelayMetrics) saveLog(ctx context.Context, err error, duration time.Dur
 	}
 
 	// Usage
-	if m.InternalResponse != nil && m.InternalResponse.Usage != nil {
-		relayLog.InputTokens = int(m.InternalResponse.Usage.PromptTokens)
-		relayLog.OutputTokens = int(m.InternalResponse.Usage.CompletionTokens)
+	if m.LLMResponse != nil && m.LLMResponse.Usage != nil {
+		relayLog.InputTokens = int(m.LLMResponse.Usage.PromptTokens)
+		relayLog.OutputTokens = int(m.LLMResponse.Usage.CompletionTokens)
 		relayLog.Cost = m.Stats.InputCost + m.Stats.OutputCost
 	}
 
 	// 请求内容
-	if m.InternalRequest != nil {
-		reqJSON, jsonErr := json.Marshal(m.InternalRequest)
+	if m.LLMRequest != nil {
+		reqJSON, jsonErr := json.Marshal(m.LLMRequest)
 		if jsonErr != nil {
 			relayLog.RequestContent = string(reqJSON)
 		} else if m.ParamOverride == "" {
@@ -197,14 +202,19 @@ func (m *RelayMetrics) saveLog(ctx context.Context, err error, duration time.Dur
 	}
 
 	// 响应内容
-	if m.InternalResponse != nil {
-		respForLog := m.filterResponseForLog(m.InternalResponse)
+	if m.LLMResponse != nil {
+		respForLog := m.filterResponseForLog(m.LLMResponse)
 		if respJSON, jsonErr := json.Marshal(respForLog); jsonErr == nil {
-			if m.InternalResponse.Usage != nil && m.InternalResponse.Usage.AnthropicUsage {
-				respStr := string(respJSON)
-				old := `"usage":{`
-				insert := fmt.Sprintf(`"usage":{"cache_creation_input_tokens":%d,`, m.InternalResponse.Usage.CacheCreationInputTokens)
-				respJSON = []byte(strings.Replace(respStr, old, insert, 1))
+			if m.LLMResponse.Usage != nil && m.LLMResponse.Usage.PromptTokensDetails != nil {
+				writeCached := m.LLMResponse.Usage.PromptTokensDetails.WriteCachedTokens +
+					m.LLMResponse.Usage.PromptTokensDetails.WriteCached5MinTokens +
+					m.LLMResponse.Usage.PromptTokensDetails.WriteCached1HourTokens
+				if writeCached > 0 {
+					respStr := string(respJSON)
+					old := `"usage":{`
+					insert := fmt.Sprintf(`"usage":{"cache_creation_input_tokens":%d,`, writeCached)
+					respJSON = []byte(strings.Replace(respStr, old, insert, 1))
+				}
 			}
 			relayLog.ResponseContent = string(respJSON)
 		}
@@ -220,31 +230,30 @@ func (m *RelayMetrics) saveLog(ctx context.Context, err error, duration time.Dur
 	}
 }
 
-// filterResponseForLog 创建响应的浅拷贝，过滤掉 images、MultipleContent 中的图片数据和 Audio.Data 以减少存储压力
-func (m *RelayMetrics) filterResponseForLog(resp *transformerModel.InternalLLMResponse) *transformerModel.InternalLLMResponse {
+// filterResponseForLog 创建响应的浅拷贝，过滤掉 MultipleContent 中的图片数据和 Audio 数据以减少存储压力
+func (m *RelayMetrics) filterResponseForLog(resp *llm.Response) *llm.Response {
 	if resp == nil {
 		return nil
 	}
 
-	filterMsg := func(msg *transformerModel.Message) *transformerModel.Message {
+	filterMsg := func(msg *llm.Message) *llm.Message {
 		if msg == nil {
 			return nil
 		}
 		c := *msg
-		c.Images = nil
 		if len(c.Content.MultipleContent) > 0 {
-			parts := make([]transformerModel.MessageContentPart, 0, len(c.Content.MultipleContent))
+			parts := make([]llm.MessageContentPart, 0, len(c.Content.MultipleContent))
 			for _, p := range c.Content.MultipleContent {
 				if p.Type == "image_url" && p.ImageURL != nil {
-					parts = append(parts, transformerModel.MessageContentPart{
+					parts = append(parts, llm.MessageContentPart{
 						Type:     "image_url",
-						ImageURL: &transformerModel.ImageURL{URL: "[image data omitted for storage]"},
+						ImageURL: &llm.ImageURL{URL: "[image data omitted for storage]"},
 					})
 				} else {
 					parts = append(parts, p)
 				}
 			}
-			c.Content = transformerModel.MessageContent{Content: c.Content.Content, MultipleContent: parts}
+			c.Content = llm.MessageContent{Content: c.Content.Content, MultipleContent: parts}
 		}
 		if c.Audio != nil && c.Audio.Data != "" {
 			a := *c.Audio
@@ -255,7 +264,7 @@ func (m *RelayMetrics) filterResponseForLog(resp *transformerModel.InternalLLMRe
 	}
 
 	filtered := *resp
-	filtered.Choices = make([]transformerModel.Choice, len(resp.Choices))
+	filtered.Choices = make([]llm.Choice, len(resp.Choices))
 	for i, choice := range resp.Choices {
 		filtered.Choices[i] = choice
 		filtered.Choices[i].Message = filterMsg(choice.Message)

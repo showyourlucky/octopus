@@ -8,8 +8,11 @@ import (
 	"github.com/bestruirui/octopus/internal/conf"
 	dbmodel "github.com/bestruirui/octopus/internal/model"
 	"github.com/bestruirui/octopus/internal/relay/balancer"
-	"github.com/bestruirui/octopus/internal/transformer/model"
 	"github.com/gin-gonic/gin"
+
+	"github.com/looplj/axonhub/llm"
+	"github.com/looplj/axonhub/llm/httpclient"
+	"github.com/looplj/axonhub/llm/transformer"
 )
 
 // maxSSEEventSize 定义 SSE 事件的最大大小。
@@ -68,8 +71,8 @@ var hopByHopHeaders = map[string]bool{
 
 type relayRequest struct {
 	c               *gin.Context
-	inAdapter       model.Inbound
-	internalRequest *model.InternalLLMRequest
+	inAdapter       transformer.Inbound
+	llmRequest      *llm.Request
 	metrics         *RelayMetrics
 	apiKeyID        int
 	requestModel    string
@@ -91,11 +94,13 @@ type relayRequest struct {
 type relayAttempt struct {
 	*relayRequest // 嵌入请求级上下文
 
-	outAdapter           model.Outbound
+	outAdapter           transformer.Outbound
 	channel              *dbmodel.Channel
 	usedKey              dbmodel.ChannelKey
 	firstTokenTimeOutSec int
 	nonStreamTimeOutSec  int
+	// hcReq 本轮出站请求（供流式转换复用，outbound TransformStream 需要原始请求做路由）
+	hcReq *httpclient.Request
 }
 
 // attemptResult 封装单次尝试的结果

@@ -4,9 +4,45 @@ import (
 	"math/rand/v2"
 	"sort"
 	"time"
-
-	"github.com/bestruirui/octopus/internal/transformer/outbound"
 )
+
+// OutboundType 渠道出站协议类型。
+// 原先定义在 internal/transformer/outbound，axonhub/llm 迁移后搬到 model 包，
+// transformer 的具体实现由 internal/relay/llm.go 按此类型选用 axonhub 的 transformer。
+type OutboundType int
+
+const (
+	OutboundTypeOpenAIChat OutboundType = iota
+	OutboundTypeOpenAIResponse
+	OutboundTypeAnthropic
+	OutboundTypeGemini
+	OutboundTypeVolcengine
+	OutboundTypeOpenAIEmbedding
+)
+
+// EmbeddingChannelTypes 定义支持 embedding 请求的 channel 类型集合
+var EmbeddingChannelTypes = map[OutboundType]bool{
+	OutboundTypeOpenAIEmbedding: true,
+}
+
+// ChatChannelTypes 定义支持 chat 请求的 channel 类型集合
+var ChatChannelTypes = map[OutboundType]bool{
+	OutboundTypeOpenAIChat:     true,
+	OutboundTypeOpenAIResponse: true,
+	OutboundTypeAnthropic:      true,
+	OutboundTypeGemini:         true,
+	OutboundTypeVolcengine:      true,
+}
+
+// IsEmbeddingChannelType 判断 channel 类型是否支持 embedding 请求
+func IsEmbeddingChannelType(channelType OutboundType) bool {
+	return EmbeddingChannelTypes[channelType]
+}
+
+// IsChatChannelType 判断 channel 类型是否支持 chat 请求
+func IsChatChannelType(channelType OutboundType) bool {
+	return ChatChannelTypes[channelType]
+}
 
 type AutoGroupType int
 
@@ -26,7 +62,7 @@ const (
 type Channel struct {
 	ID                  int                   `json:"id" gorm:"primaryKey"`
 	Name                string                `json:"name" gorm:"unique;not null"`
-	Type                outbound.OutboundType `json:"type"`
+	Type                OutboundType `json:"type"`
 	Enabled             bool                  `json:"enabled" gorm:"default:true"`
 	BaseUrls            []BaseUrl             `json:"base_urls" gorm:"serializer:json"`
 	Keys                []ChannelKey          `json:"keys" gorm:"foreignKey:ChannelID"`
@@ -80,7 +116,7 @@ type ChannelKey struct {
 type ChannelUpdateRequest struct {
 	ID            int                    `json:"id" binding:"required"`
 	Name          *string                `json:"name,omitempty"`
-	Type          *outbound.OutboundType `json:"type,omitempty"`
+	Type          *OutboundType `json:"type,omitempty"`
 	Enabled       *bool                  `json:"enabled,omitempty"`
 	BaseUrls      *[]BaseUrl             `json:"base_urls,omitempty"`
 	Model         *string                `json:"model,omitempty"`
@@ -124,7 +160,7 @@ type ChannelKeyUpdateRequest struct {
 
 // ChannelFetchModelRequest is used by /channel/fetch-model (not persisted).
 type ChannelFetchModelRequest struct {
-	Type    outbound.OutboundType `json:"type" binding:"required"`
+	Type    OutboundType `json:"type" binding:"required"`
 	BaseURL string                `json:"base_url" binding:"required"`
 	Key     string                `json:"key" binding:"required"`
 	Proxy   bool                  `json:"proxy"`
